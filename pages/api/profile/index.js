@@ -1,5 +1,5 @@
 // /api/profile — CRUD for advisor profile, voice samples, content prefs, advisor posts
-import { createServerClient } from '../../lib/supabase';
+import { createServerClient } from '../../../lib/supabase';
 
 export default async function handler(req, res) {
   const db = createServerClient();
