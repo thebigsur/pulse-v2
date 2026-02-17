@@ -1,5 +1,5 @@
 // /api/outreach — Get leads, mark as messaged/dismissed
-import { createServerClient } from '../../lib/supabase';
+import { createServerClient } from '../../../lib/supabase';
 
 export default async function handler(req, res) {
   const db = createServerClient();
