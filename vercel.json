@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/scrape/content",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/scrape/comments",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}
