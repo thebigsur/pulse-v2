@@ -1,5 +1,5 @@
 // /api/comments — Get comment opportunities, mark as done
-import { createServerClient } from '../../lib/supabase';
+import { createServerClient } from '../../../lib/supabase';
 
 export default async function handler(req, res) {
   const db = createServerClient();
