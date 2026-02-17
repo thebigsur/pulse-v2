@@ -1,5 +1,5 @@
 // /api/performance — Log performance, get metrics
-import { createServerClient } from '../../lib/supabase';
+import { createServerClient } from '../../../lib/supabase';
 
 export default async function handler(req, res) {
   const db = createServerClient();
