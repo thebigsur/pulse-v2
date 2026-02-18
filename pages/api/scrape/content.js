@@ -32,8 +32,19 @@ export default async function handler(req, res) {
   try {
     // 1. Get advisor profile + keywords
     const { data: profile } = await db.from('advisor_profile').select('*').single();
-    const keywords = (profile?.content_keywords || 'equity compensation\nRSU tax strategy\nwealth building high earners')
+    const allKeywords = (profile?.content_keywords || 'equity compensation\nRSU tax strategy\nwealth building high earners')
       .split('\n').map(k => k.trim()).filter(Boolean);
+
+    // Rotate 3 keywords per run to stay within timeout limits
+    // Uses day-of-year to cycle through the full list
+    const MAX_KEYWORDS_PER_RUN = 3;
+    const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+    const startIdx = (dayIndex * MAX_KEYWORDS_PER_RUN) % allKeywords.length;
+    const keywords = [];
+    for (let i = 0; i < Math.min(MAX_KEYWORDS_PER_RUN, allKeywords.length); i++) {
+      keywords.push(allKeywords[(startIdx + i) % allKeywords.length]);
+    }
+    console.log(`Running with ${keywords.length}/${allKeywords.length} keywords:`, keywords);
 
     // 2. Scrape all platforms
     const [linkedin, twitter, tiktok] = await Promise.all([
