@@ -3,6 +3,10 @@ import { createServerClient } from '../../../lib/supabase';
 import { scrapeLinkedInCommentFeed } from '../../../lib/scraper';
 import { scoreComment, generateComment } from '../../../lib/ai';
 
+export const config = {
+  maxDuration: 300,
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
