@@ -125,7 +125,7 @@ function Field({ label, children, hint }) {
   );
 }
 
-function Input({ multiline, rows = 3, value, placeholder, style: s, small }) {
+function Input({ multiline, rows = 3, value, onChange, placeholder, style: s, small }) {
   const shared = {
     width: "100%", background: "transparent", border: "none",
     borderBottom: `1px solid ${C.stroke}`, color: C.text,
@@ -137,8 +137,10 @@ function Input({ multiline, rows = 3, value, placeholder, style: s, small }) {
     onFocus: e => e.target.style.borderBottomColor = C.gold,
     onBlur: e => e.target.style.borderBottomColor = C.stroke,
   };
-  if (multiline) return <textarea rows={rows} placeholder={placeholder} defaultValue={value} style={shared} {...handlers} />;
-  return <input type="text" placeholder={placeholder} defaultValue={value} style={shared} {...handlers} />;
+  // Controlled mode when onChange is provided, otherwise uncontrolled (backward compat)
+  const valProps = onChange ? { value: value || "", onChange: e => onChange(e.target.value) } : { defaultValue: value };
+  if (multiline) return <textarea rows={rows} placeholder={placeholder} {...valProps} style={shared} {...handlers} />;
+  return <input type="text" placeholder={placeholder} {...valProps} style={shared} {...handlers} />;
 }
 
 function SectionTitle({ children, sub }) {
@@ -852,11 +854,55 @@ function PerformanceView() {
 
 function ProfileView() {
   const [tab, setTab] = useState("bio");
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Fetch profile from API on mount
+  useEffect(() => {
+    fetch("/api/profile")
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(data => { setProfile(data); setLoading(false); })
+      .catch(() => {
+        // If no profile exists yet, start with empty defaults
+        setProfile({});
+        setLoading(false);
+      });
+  }, []);
+
+  // Generic field updater
+  const updateField = (field, value) => {
+    setProfile(prev => ({ ...prev, [field]: value }));
+    setSaved(false);
+  };
+
+  // Save profile to API
+  const saveProfile = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(profile),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error("Failed to save profile:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const tabs = [
     { id: "bio", label: "Bio" }, { id: "icp", label: "ICP" },
     { id: "rules", label: "Post Rules" }, { id: "voice", label: "Voice" },
     { id: "history", label: "Post History" }, { id: "compliance", label: "Compliance" },
   ];
+
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle sub="Your professional identity — feeds every AI generation">Profile</SectionTitle>
@@ -872,25 +918,42 @@ function ProfileView() {
         ))}
       </div>
       <div style={{ maxWidth: 540 }}>
-        {tab === "bio" && <BioForm />}
-        {tab === "icp" && <ICPForm />}
-        {tab === "rules" && <RulesForm />}
-        {tab === "voice" && <VoiceForm />}
-        {tab === "history" && <HistoryForm />}
-        {tab === "compliance" && <ComplianceForm />}
+        {loading ? (
+          <p style={{ color: C.textFaint, fontSize: 13, padding: "40px 0" }}>Loading profile...</p>
+        ) : (
+          <>
+            {tab === "bio" && <BioForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
+            {tab === "icp" && <ICPForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
+            {tab === "rules" && <RulesForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
+            {tab === "voice" && <VoiceForm />}
+            {tab === "history" && <HistoryForm />}
+            {tab === "compliance" && <ComplianceForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function BioForm() {
+function SaveButton({ onSave, saving, saved }) {
+  return (
+    <div style={{ marginTop: 32, display: "flex", alignItems: "center", gap: 12 }}>
+      <Btn primary onClick={onSave} style={{ opacity: saving ? 0.6 : 1 }}>
+        {saving ? "Saving..." : saved ? <><Icons.check /> Saved</> : "Save"}
+      </Btn>
+      {saved && <span style={{ fontSize: 12, color: C.green, fontFamily: F.mono }}>Changes saved</span>}
+    </div>
+  );
+}
+
+function BioForm({ profile, updateField, onSave, saving, saved }) {
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
-    <Field label="Full Name"><Input value="Josh Miller" /></Field>
-    <Field label="Firm"><Input value="Merrill Lynch" /></Field>
-    <Field label="Title"><Input value="Wealth Management Advisor" /></Field>
-    <Field label="Specialization"><Input value="Equity compensation planning & tax optimization for high-earning tech professionals and attorneys" /></Field>
-    <Field label="Tagline" hint="Your LinkedIn headline or positioning statement"><Input value="Helping engineers and attorneys turn high income into actual wealth" /></Field>
-    <div style={{ marginTop: 32 }}><Btn primary>Save</Btn></div>
+    <Field label="Full Name"><Input value={profile.name} onChange={v => updateField("name", v)} placeholder="Your full name" /></Field>
+    <Field label="Firm"><Input value={profile.firm} onChange={v => updateField("firm", v)} placeholder="Your firm name" /></Field>
+    <Field label="Title"><Input value={profile.title} onChange={v => updateField("title", v)} placeholder="Your professional title" /></Field>
+    <Field label="Specialization"><Input value={profile.specialization} onChange={v => updateField("specialization", v)} placeholder="What you specialize in" /></Field>
+    <Field label="Tagline" hint="Your LinkedIn headline or positioning statement"><Input value={profile.tagline} onChange={v => updateField("tagline", v)} placeholder="Your positioning statement" /></Field>
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
   </div>);
 }
 
@@ -905,25 +968,44 @@ const CONTENT_PREF_OPTIONS = [
   { id: "vulnerable", label: "Vulnerable / personal", desc: "Share your own journey, mistakes, or behind-the-scenes. Humanizes the advisor brand." },
 ];
 
-function ContentPreferences() {
-  const [selected, setSelected] = useState(new Set(["contrarian", "data", "anecdotes"]));
+function ContentPreferences({ profile, updateField }) {
+  // Parse stored preferences from profile (comma-separated string) or default
+  const storedPrefs = (profile.content_preferences || "contrarian,data,anecdotes").split(",").map(s => s.trim()).filter(Boolean);
+  const storedCustoms = (profile.custom_preferences || "").split("\n").filter(s => s.trim());
+
+  const [selected, setSelected] = useState(new Set(storedPrefs));
   const [showCustom, setShowCustom] = useState(false);
-  const [customs, setCustoms] = useState([]);
+  const [customs, setCustoms] = useState(storedCustoms);
   const [customText, setCustomText] = useState("");
+
+  // Sync changes back to profile state
+  const syncToProfile = (newSelected, newCustoms) => {
+    updateField("content_preferences", Array.from(newSelected).join(","));
+    updateField("custom_preferences", newCustoms.join("\n"));
+  };
 
   const toggle = (id) => {
     setSelected(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
+      syncToProfile(next, customs);
       return next;
     });
   };
 
   const addCustom = () => {
     if (!customText.trim()) return;
-    setCustoms(c => [...c, customText.trim()]);
+    const newCustoms = [...customs, customText.trim()];
+    setCustoms(newCustoms);
     setCustomText("");
     setShowCustom(false);
+    syncToProfile(selected, newCustoms);
+  };
+
+  const removeCustom = (idx) => {
+    const newCustoms = customs.filter((_, j) => j !== idx);
+    setCustoms(newCustoms);
+    syncToProfile(selected, newCustoms);
   };
 
   return (
@@ -975,7 +1057,7 @@ function ContentPreferences() {
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={C.base} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
             </div>
             <span style={{ fontSize: 13, fontWeight: 500, color: C.text, flex: 1 }}>{c}</span>
-            <button onClick={() => setCustoms(prev => prev.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: C.textGhost, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+            <button onClick={() => removeCustom(i)} style={{ background: "none", border: "none", color: C.textGhost, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
           </div>
         ))}
 
@@ -1022,29 +1104,31 @@ function ContentPreferences() {
   );
 }
 
-function ICPForm() {
+function ICPForm({ profile, updateField, onSave, saving, saved }) {
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
     <Field label="Age Range">
       <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-        <Input value="25" style={{ width: 60, textAlign: "center" }} /><span style={{ color: C.textGhost }}>to</span><Input value="45" style={{ width: 60, textAlign: "center" }} />
+        <Input value={profile.icp_age_min || ""} onChange={v => updateField("icp_age_min", v)} style={{ width: 60, textAlign: "center" }} placeholder="25" />
+        <span style={{ color: C.textGhost }}>to</span>
+        <Input value={profile.icp_age_max || ""} onChange={v => updateField("icp_age_max", v)} style={{ width: 60, textAlign: "center" }} placeholder="45" />
       </div>
     </Field>
-    <Field label="Target Professions" hint="One per line"><Input multiline rows={4} value={"Software Engineers\nTech Employees (FAANG, startups)\nAttorneys (BigLaw, startup counsel, in-house)\nAerospace Engineers"} /></Field>
-    <Field label="Pain Points" hint="What keeps your ICP up at night — one per line"><Input multiline rows={5} value={"Feel trapped on the W-2 treadmill — high income but not building wealth\nEquity compensation anxiety — don't understand grants, afraid of wrong decisions\nWealth-building paralysis — overwhelmed by options and conflicting advice\nDistrust traditional financial advisors\nComplex tax situations from vesting schedules and AMT exposure"} /></Field>
-    <ContentPreferences />
-    <div style={{ marginTop: 32 }}><Btn primary>Save</Btn></div>
+    <Field label="Target Professions" hint="One per line"><Input multiline rows={4} value={profile.target_professions} onChange={v => updateField("target_professions", v)} placeholder="Software Engineers\nAttorneys (BigLaw)\nTech Employees" /></Field>
+    <Field label="Pain Points" hint="What keeps your ICP up at night — one per line"><Input multiline rows={5} value={profile.pain_points} onChange={v => updateField("pain_points", v)} placeholder="Feel trapped on the W-2 treadmill\nEquity compensation anxiety\nWealth-building paralysis" /></Field>
+    <ContentPreferences profile={profile} updateField={updateField} />
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
   </div>);
 }
 
-function RulesForm() {
+function RulesForm({ profile, updateField, onSave, saving, saved }) {
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
-    <Field label="Posts Per Week"><Input value="4" style={{ width: 60, textAlign: "center" }} /></Field>
-    <Field label="Preferred Post Length"><Input value="Under 200 words — short, punchy, scannable" /></Field>
-    <Field label="Preferred Formats" hint="What structures you like"><Input multiline rows={3} value={"Contrarian hooks under 100 words\nData-driven analysis with specific numbers\nShort personal anecdotes that reveal expertise"} /></Field>
-    <Field label="Topics to Always Cover" hint="One per line"><Input multiline rows={5} value={"RSU/ISO/NSO taxation\nSolo 401(k) structures\nRoth conversion strategies\nConcentrated stock positions\nWealth-building psychology"} /></Field>
-    <Field label="Topics to Never Cover" hint="One per line"><Input multiline rows={3} value={"Crypto/Bitcoin\nInsurance products\nSpecific stock picks\nPolitics"} /></Field>
-    <Field label="Tone & Voice Rules"><Input multiline rows={4} value={"Like a smart friend at a bar, not a compliance department\nShort, punchy sentences — no fluff\nHumor when natural, never forced\nNever say: 'in this economy', 'financial freedom', 'passive income'"} /></Field>
-    <div style={{ marginTop: 32 }}><Btn primary>Save</Btn></div>
+    <Field label="Posts Per Week"><Input value={profile.posts_per_week || ""} onChange={v => updateField("posts_per_week", v)} style={{ width: 60, textAlign: "center" }} placeholder="4" /></Field>
+    <Field label="Preferred Post Length"><Input value={profile.preferred_length} onChange={v => updateField("preferred_length", v)} placeholder="Under 200 words — short, punchy, scannable" /></Field>
+    <Field label="Preferred Formats" hint="What structures you like"><Input multiline rows={3} value={profile.preferred_formats} onChange={v => updateField("preferred_formats", v)} placeholder="Contrarian hooks under 100 words\nData-driven analysis with specific numbers" /></Field>
+    <Field label="Topics to Always Cover" hint="One per line"><Input multiline rows={5} value={profile.topics_always} onChange={v => updateField("topics_always", v)} placeholder="RSU/ISO/NSO taxation\nSolo 401(k) structures\nRoth conversion strategies" /></Field>
+    <Field label="Topics to Never Cover" hint="One per line"><Input multiline rows={3} value={profile.topics_never} onChange={v => updateField("topics_never", v)} placeholder="Crypto/Bitcoin\nInsurance products\nSpecific stock picks" /></Field>
+    <Field label="Tone & Voice Rules"><Input multiline rows={4} value={profile.tone_rules} onChange={v => updateField("tone_rules", v)} placeholder="Like a smart friend at a bar, not a compliance department\nShort, punchy sentences — no fluff" /></Field>
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
   </div>);
 }
 
@@ -1095,13 +1179,13 @@ function HistoryForm() {
   </div>);
 }
 
-function ComplianceForm() {
+function ComplianceForm({ profile, updateField, onSave, saving, saved }) {
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
     <p style={{ fontSize: 13, color: C.gold, marginBottom: 24 }}>All generated content is checked against these rules before you see it.</p>
-    <Field label="Firm Compliance Rules" hint="One rule per line"><Input multiline rows={10} value={`Never use the word "guarantee" or "guaranteed returns"\nNever make forward-looking statements about investment performance\nCannot reference specific client situations, even anonymized\nAll posts mentioning investment products must include firm disclaimer\nCannot use phrases: "risk-free," "no-brainer," "can't lose," "sure thing"\nNo testimonials or endorsements from clients\nCannot discuss specific securities by ticker unless sharing publicly available data\nPerformance data must include time period and relevant disclosures\nCannot promise specific outcomes or results\nMust avoid language that could be construed as personal investment advice`} /></Field>
-    <Field label="Required Disclaimer Text"><Input multiline rows={3} value="Opinions expressed are my own and do not reflect the views of Merrill Lynch or Bank of America. This content is for educational purposes only and should not be considered personalized investment advice." /></Field>
-    <Field label="Additional Compliance Notes"><Input multiline rows={3} placeholder="Any other compliance requirements, internal review processes, or firm-specific rules..." /></Field>
-    <div style={{ marginTop: 32 }}><Btn primary>Save</Btn></div>
+    <Field label="Firm Compliance Rules" hint="One rule per line"><Input multiline rows={10} value={profile.compliance_rules} onChange={v => updateField("compliance_rules", v)} placeholder='Never use the word "guarantee" or "guaranteed returns"\nNever make forward-looking statements about investment performance' /></Field>
+    <Field label="Required Disclaimer Text"><Input multiline rows={3} value={profile.disclaimer_text} onChange={v => updateField("disclaimer_text", v)} placeholder="Opinions expressed are my own and do not reflect the views of..." /></Field>
+    <Field label="Additional Compliance Notes"><Input multiline rows={3} value={profile.compliance_notes} onChange={v => updateField("compliance_notes", v)} placeholder="Any other compliance requirements, internal review processes, or firm-specific rules..." /></Field>
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
   </div>);
 }
 
@@ -1110,17 +1194,56 @@ function ComplianceForm() {
 // ═══════════════════════════════════════════
 
 function SettingsView() {
+  const [settings, setSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/profile")
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(data => { setSettings(data); setLoading(false); })
+      .catch(() => { setSettings({}); setLoading(false); });
+  }, []);
+
+  const updateField = (field, value) => {
+    setSettings(prev => ({ ...prev, [field]: value }));
+    setSaved(false);
+  };
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (res.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error("Failed to save settings:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div style={{ animation: "enter 0.35s ease", maxWidth: 540 }}><SectionTitle sub="Pipeline configuration and operational settings">Settings</SectionTitle><p style={{ color: C.textFaint, fontSize: 13 }}>Loading...</p></div>;
+
   return (
     <div style={{ animation: "enter 0.35s ease", maxWidth: 540 }}>
       <SectionTitle sub="Pipeline configuration and operational settings">Settings</SectionTitle>
-      <Field label="Content Source Keywords" hint="One per line — drives trending content scraping"><Input multiline rows={5} value={"equity compensation\nRSU tax strategy\nwealth building high earners\nfinancial planning millennials\nstock options tax\nRoth conversion\nSolo 401k"} /></Field>
-      <Field label="Comment Target Keywords" hint="One per line — topics where your ICP engages"><Input multiline rows={5} value={"tech careers\nstartup culture\nBigLaw life\naerospace engineering\ncareer growth tech\nequity compensation\nRSU vesting"} /></Field>
-      <Field label="Non-Prospect Filter" hint="One per line — exclude from Outreach"><Input multiline rows={3} value={"Financial Advisor\nWealth Manager\nInsurance Agent\nLinkedIn Coach\nContent Creator"} /></Field>
+      <Field label="Content Source Keywords" hint="One per line — drives trending content scraping"><Input multiline rows={5} value={settings.content_keywords} onChange={v => updateField("content_keywords", v)} placeholder="equity compensation\nRSU tax strategy\nwealth building high earners" /></Field>
+      <Field label="Comment Target Keywords" hint="One per line — topics where your ICP engages"><Input multiline rows={5} value={settings.comment_keywords} onChange={v => updateField("comment_keywords", v)} placeholder="tech careers\nstartup culture\nBigLaw life" /></Field>
+      <Field label="Non-Prospect Filter" hint="One per line — exclude from Outreach"><Input multiline rows={3} value={settings.non_prospect_filter} onChange={v => updateField("non_prospect_filter", v)} placeholder="Financial Advisor\nWealth Manager\nInsurance Agent" /></Field>
       <Field label="Sales Navigator Lead List">
         <div style={{ padding: "14px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: C.textSoft }}>247 leads · Updated Feb 10</span><Btn>Upload CSV</Btn>
+          <span style={{ fontSize: 13, color: C.textSoft }}>{settings.lead_list_count || 0} leads · {settings.lead_list_updated || "Not uploaded"}</span><Btn>Upload CSV</Btn>
         </div>
       </Field>
+      <SaveButton onSave={saveSettings} saving={saving} saved={saved} />
       <Separator />
       <div style={{ marginBottom: 32 }}>
         <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Pipeline</p>
