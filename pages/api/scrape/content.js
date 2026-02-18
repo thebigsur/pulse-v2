@@ -7,6 +7,10 @@ import { createServerClient } from '../../../lib/supabase';
 import { scrapeLinkedInContent, scrapeTwitterContent, scrapeTikTokContent } from '../../../lib/scraper';
 import { scoreContent, generateDraft } from '../../../lib/ai';
 
+export const config = {
+  maxDuration: 300,
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
