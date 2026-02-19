@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useDrafts, useComments } from "../lib/hooks";
+import { useDrafts, useComments, useOutreach } from "../lib/hooks";
 
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
@@ -781,10 +781,27 @@ function CommentsView() {
 // OUTREACH
 // ═══════════════════════════════════════════
 
+function mapApiLead(item) {
+  const daysAgo = item.surfaced_at
+    ? Math.max(0, Math.round((Date.now() - new Date(item.surfaced_at).getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
+  return {
+    id: item.id,
+    name: item.name || "Unknown",
+    title: [item.title, item.company].filter(Boolean).join(", "),
+    profileUrl: item.linkedin_url || "#",
+    interaction: item.interaction_text || "",
+    daysAgo,
+    signal: item.signal_strength || "moderate",
+    starter: item.conversation_starter || "",
+  };
+}
+
 function OutreachView() {
-  const [messaged, setMessaged] = useState({});
+  const { leads: rawLeads, loading, updateStatus } = useOutreach();
   const [copiedStarter, setCopiedStarter] = useState({});
-  const active = OUTREACH.filter(o => !messaged[o.id]);
+
+  const active = rawLeads.map(mapApiLead);
 
   const handleOpenProfile = (lead) => {
     window.open(lead.profileUrl, "_blank");
@@ -797,10 +814,34 @@ function OutreachView() {
     }).catch(() => {});
   };
 
+  const handleDismiss = async (id) => {
+    try { await updateStatus(id, 'dismissed'); } catch (err) { console.error('Dismiss failed:', err); }
+  };
+
+  const handleMessaged = async (id) => {
+    try { await updateStatus(id, 'messaged'); } catch (err) { console.error('Messaged failed:', err); }
+  };
+
+  if (loading) return (
+    <div style={{ animation: "enter 0.35s ease" }}>
+      <SectionTitle>Outreach</SectionTitle>
+      <div style={{ padding: "60px 0", textAlign: "center" }}>
+        <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>Loading leads...</p>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub="People who engaged with your content this week">Outreach</SectionTitle>
-      <p style={{ fontSize: 13, color: C.gold, marginBottom: 28 }}>People you message are 90% more likely to see your next post.</p>
+      <SectionTitle sub={active.length > 0 ? `${active.length} people who engaged with your content` : "People who engaged with your content"}>Outreach</SectionTitle>
+      {active.length > 0 && <p style={{ fontSize: 13, color: C.gold, marginBottom: 28 }}>People you message are 90% more likely to see your next post.</p>}
+
+      {active.length === 0 && (
+        <div style={{ padding: "60px 0" }}>
+          <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No outreach leads yet</p>
+          <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Leads surface here when people engage with your posts and comments.</p>
+        </div>
+      )}
 
       {active.map((lead, idx) => (
         <div key={lead.id} style={{ padding: "28px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.3s ease ${idx * 0.06}s both` }}>
@@ -816,23 +857,30 @@ function OutreachView() {
             <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{lead.daysAgo}d</span>
           </div>
 
-          <div style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.6, fontStyle: "italic", paddingLeft: 16, borderLeft: `2px solid ${C.purple}`, marginBottom: 18 }}>
-            {lead.interaction}
-          </div>
-
-          <div style={{ marginBottom: 18 }}>
-            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Suggested comment — edit in your voice</p>
-            <div style={{ padding: "16px 18px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.08)` }}>
-              <p style={{ fontSize: 14, color: C.text, lineHeight: 1.7 }}>{lead.starter}</p>
+          {lead.interaction && (
+            <div style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.6, fontStyle: "italic", paddingLeft: 16, borderLeft: `2px solid ${C.purple}`, marginBottom: 18 }}>
+              {lead.interaction}
             </div>
-          </div>
+          )}
+
+          {lead.starter && (
+            <div style={{ marginBottom: 18 }}>
+              <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Suggested comment — edit in your voice</p>
+              <div style={{ padding: "16px 18px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.08)` }}>
+                <p style={{ fontSize: 14, color: C.text, lineHeight: 1.7 }}>{lead.starter}</p>
+              </div>
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: 8 }}>
             <Btn primary onClick={() => handleOpenProfile(lead)}><Icons.external /> Open Profile</Btn>
-            <Btn onClick={() => handleCopyMessage(lead)}>
-              {copiedStarter[lead.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy Message</>}
-            </Btn>
-            <Btn ghost onClick={() => setMessaged(m => ({ ...m, [lead.id]: true }))}>Dismiss</Btn>
+            {lead.starter && (
+              <Btn onClick={() => handleCopyMessage(lead)}>
+                {copiedStarter[lead.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy Message</>}
+              </Btn>
+            )}
+            <Btn ghost onClick={() => handleMessaged(lead.id)}>Messaged</Btn>
+            <Btn ghost onClick={() => handleDismiss(lead.id)}>Dismiss</Btn>
           </div>
         </div>
       ))}
