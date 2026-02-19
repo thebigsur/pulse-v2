@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useDrafts } from "../lib/hooks";
 
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
@@ -271,13 +272,36 @@ const POST_HISTORY = [
 ];
 
 // ═══════════════════════════════════════════
+// DATA MAPPER — API → UI shape
+// ═══════════════════════════════════════════
+
+function mapApiDraft(item) {
+  const engagement = [
+    item.likes ? `${item.likes.toLocaleString()} likes` : null,
+    item.comments ? `${item.comments} comments` : null,
+  ].filter(Boolean).join(" · ");
+
+  return {
+    id: item.id,
+    text: item.draft_text || "",
+    source: {
+      text: item.suggested_angle || item.post_text || "",
+      author: item.creator_handle ? `@${item.creator_handle}` : (item.creator_name || "Unknown"),
+      engagement: engagement || "New post",
+      url: item.url || null,
+    },
+    topic: (item.draft_topic_tags && item.draft_topic_tags[0]) || "General",
+    imageHint: item.draft_image_hint || null,
+    hashtags: (item.draft_hashtags && item.draft_hashtags.length > 0) ? item.draft_hashtags : null,
+  };
+}
+
+// ═══════════════════════════════════════════
 // POSTS — All visible, scrollable, Approve + New Draft
 // ═══════════════════════════════════════════
 
 function PostsView() {
-  const [approved, setApproved] = useState({});
-  const [drafts, setDrafts] = useState(DRAFTS);
-  const [replacementIdx, setReplacementIdx] = useState(0);
+  const { drafts: rawDrafts, loading, approve: apiApprove, skip: apiSkip } = useDrafts();
   const [showSource, setShowSource] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const [replacing, setReplacing] = useState({});
@@ -286,18 +310,24 @@ function PostsView() {
 
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
-  const activeDrafts = drafts.filter(d => !approved[d.id]);
-  const approvedDrafts = drafts.filter(d => approved[d.id]);
+  // Map API data to UI shape and split by status
+  const allDrafts = rawDrafts.map(mapApiDraft);
+  const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft);
+  const approvedDrafts = rawDrafts.filter(d => d.draft_status === 'approved').map(mapApiDraft);
 
-  const handleNewDraft = (oldId) => {
-    if (replacementIdx >= REPLACEMENT_DRAFTS.length) return;
-    setReplacing(r => ({ ...r, [oldId]: true }));
-    setTimeout(() => {
-      const replacement = REPLACEMENT_DRAFTS[replacementIdx];
-      setDrafts(prev => prev.map(d => d.id === oldId ? replacement : d));
-      setReplacementIdx(i => i + 1);
-      setReplacing(r => ({ ...r, [oldId]: false }));
-    }, 300);
+  const handleApprove = async (id) => {
+    try { await apiApprove(id); } catch (err) { console.error('Approve failed:', err); }
+  };
+
+  const handleNewDraft = async (id) => {
+    setReplacing(r => ({ ...r, [id]: true }));
+    try {
+      await apiSkip(id);
+    } catch (err) {
+      console.error('Skip failed:', err);
+    } finally {
+      setTimeout(() => setReplacing(r => ({ ...r, [id]: false })), 300);
+    }
   };
 
   const handleCopy = (draft) => {
@@ -319,12 +349,26 @@ function PostsView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={`${activeDrafts.length} drafts this week · ${approvedDrafts.length} approved`}>
+      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} drafts this week · ${approvedDrafts.length} approved`}>
         Posts
       </SectionTitle>
 
+      {loading && (
+        <div style={{ padding: "60px 0", textAlign: "center" }}>
+          <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>Loading drafts...</p>
+          <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Fetching from Supabase</p>
+        </div>
+      )}
+
+      {!loading && activeDrafts.length === 0 && approvedDrafts.length === 0 && (
+        <div style={{ padding: "60px 0", textAlign: "center" }}>
+          <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No drafts yet</p>
+          <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Run the content pipeline to generate drafts from trending content.</p>
+        </div>
+      )}
+
       {/* Last post performance callout */}
-      <div style={{
+      {!loading && activeDrafts.length + approvedDrafts.length > 0 && <><div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "14px 18px", borderRadius: 8, marginBottom: 24,
         background: C.greenSoft, border: `1px solid rgba(109,175,123,0.15)`,
@@ -479,7 +523,7 @@ function PostsView() {
 
               {/* Actions: Approve + New Draft */}
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn primary onClick={() => setApproved(a => ({ ...a, [draft.id]: true }))}>
+                <Btn primary onClick={() => handleApprove(draft.id)}>
                   <Icons.check /> Approve
                 </Btn>
                 <Btn onClick={() => handleNewDraft(draft.id)}>
@@ -571,6 +615,7 @@ function PostsView() {
           </div>
         )}
       </div>
+      </>}
     </div>
   );
 }
