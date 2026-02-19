@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useDrafts } from "../lib/hooks";
+import { useDrafts, useComments } from "../lib/hooks";
 
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
@@ -624,12 +624,37 @@ function PostsView() {
 // COMMENTS — Split layout sprint
 // ═══════════════════════════════════════════
 
+function mapApiComment(item) {
+  const ageStr = item.post_age_hours != null
+    ? (item.post_age_hours < 1 ? "<1h" : `${Math.round(item.post_age_hours)}h`)
+    : "recent";
+  return {
+    id: item.id,
+    author: item.creator_name || item.creator_handle || "Unknown",
+    title: item.creator_title || "",
+    company: item.creator_company || "",
+    post: item.post_text || "",
+    postUrl: item.url || "#",
+    engagement: {
+      likes: item.likes || 0,
+      comments: item.comments || 0,
+      age: ageStr,
+    },
+    comment: item.suggested_comment || "",
+    snLead: item.sn_lead || false,
+  };
+}
+
 function CommentsView() {
-  const [done, setDone] = useState({});
+  const { comments: rawComments, loading, markDone } = useComments();
   const [copiedComment, setCopiedComment] = useState(false);
-  const active = COMMENTS.filter(c => !done[c.id]);
+  const [localDone, setLocalDone] = useState({});
+
+  const allComments = rawComments.map(mapApiComment);
+  const active = allComments.filter(c => !localDone[c.id]);
   const current = active[0];
-  const completed = Object.keys(done).length;
+  const completed = localDone ? Object.keys(localDone).length : 0;
+  const totalCount = allComments.length + completed;
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
   const handleCopyAndOpen = () => {
@@ -639,21 +664,41 @@ function CommentsView() {
       setTimeout(() => {
         window.open(current.postUrl, "_blank");
         setCopiedComment(false);
-        setDone(d => ({ ...d, [current.id]: true }));
+        setLocalDone(d => ({ ...d, [current.id]: true }));
+        markDone(current.id).catch(err => console.error('markDone failed:', err));
       }, 800);
     }).catch(() => {
-      // Fallback: open link even if clipboard fails
       window.open(current.postUrl, "_blank");
-      setDone(d => ({ ...d, [current.id]: true }));
+      setLocalDone(d => ({ ...d, [current.id]: true }));
+      markDone(current.id).catch(err => console.error('markDone failed:', err));
     });
   };
+
+  const handleSkip = (id) => {
+    setLocalDone(d => ({ ...d, [id]: true }));
+    markDone(id).catch(err => console.error('markDone failed:', err));
+  };
+
+  if (loading) return (
+    <div style={{ animation: "enter 0.35s ease" }}>
+      <SectionTitle>Comments</SectionTitle>
+      <div style={{ padding: "60px 0", textAlign: "center" }}>
+        <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>Loading comments...</p>
+        <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Fetching from Supabase</p>
+      </div>
+    </div>
+  );
 
   if (!current) return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle>Comments</SectionTitle>
       <div style={{ padding: "60px 0" }}>
-        <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>Sprint complete.</p>
-        <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>{completed} comments this session.</p>
+        <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>
+          {totalCount === 0 ? "No comment opportunities yet" : "Sprint complete."}
+        </p>
+        <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
+          {totalCount === 0 ? "Run the comment pipeline to find posts worth engaging with." : `${completed} comments this session.`}
+        </p>
       </div>
     </div>
   );
@@ -664,10 +709,10 @@ function CommentsView() {
         <SectionTitle sub={`${active.length} remaining · ${completed} done`}>Comments</SectionTitle>
         <div style={{ width: 120, marginBottom: 42 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>{completed}/{COMMENTS.length}</span>
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>{completed}/{totalCount}</span>
           </div>
           <div style={{ height: 2, background: C.stroke, borderRadius: 1, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${(completed / COMMENTS.length) * 100}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
+            <div style={{ height: "100%", width: `${totalCount > 0 ? (completed / totalCount) * 100 : 0}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
           </div>
         </div>
       </div>
@@ -680,7 +725,7 @@ function CommentsView() {
               <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{current.author}</span>
               {current.snLead && <Tag color={C.green} bg={C.greenSoft}>SN Lead</Tag>}
             </div>
-            <span style={{ fontSize: 12, color: C.textFaint }}>{current.title} · {current.company}</span>
+            <span style={{ fontSize: 12, color: C.textFaint }}>{[current.title, current.company].filter(Boolean).join(" · ")}</span>
           </div>
           <div style={{ fontSize: 14, color: C.textSoft, lineHeight: 1.75, fontStyle: "italic", paddingLeft: 16, borderLeft: `1px solid ${C.stroke}` }}>
             {current.post}
@@ -704,7 +749,7 @@ function CommentsView() {
             <Btn primary onClick={handleCopyAndOpen}>
               {copiedComment ? <><Icons.check /> Copied — opening LinkedIn</> : <><Icons.external /> Copy &amp; Open on LinkedIn</>}
             </Btn>
-            <Btn ghost onClick={() => setDone(d => ({ ...d, [current.id]: true }))}>Next</Btn>
+            <Btn ghost onClick={() => handleSkip(current.id)}>Next</Btn>
           </div>
         </div>
       </div>
