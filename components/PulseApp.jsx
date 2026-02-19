@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useDrafts, useComments, useOutreach } from "../lib/hooks";
+import { useDrafts, useComments, useOutreach, usePerformance } from "../lib/hooks";
 
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
@@ -214,63 +214,6 @@ const Icons = {
 // MOCK DATA
 // ═══════════════════════════════════════════
 
-const DRAFTS = [
-  { id: 1, text: `Your RSUs aren't a bonus.\nThey're a tax time bomb.\n\nI see this every week: engineers at $200K+ comp sitting on 6 figures of company stock, treating vesting dates like paydays.\n\nMeanwhile they're:\n→ Paying 40%+ effective tax on every vest\n→ Holding concentrated positions they'd never buy on purpose\n→ Missing the 83(b) election window entirely\n\nThe fix isn't complicated. But it requires planning BEFORE vesting day, not after.`, source: { text: "Why I sold all my RSUs the day they vested", author: "@SeniorEng_FAANG", engagement: "2,847 likes · 14h", url: "https://linkedin.com/feed/update/urn:li:activity:source001" }, topic: "RSU Taxation", imageHint: "Chart: RSU tax impact at different income levels", hashtags: null },
-  { id: 2, text: `"I make $350K and I'm broke."\n\nI hear this from attorneys more than anyone.\n\nBigLaw salary. Student loans. Lifestyle inflation. Golden handcuffs.\n\nThe math looks good on paper. The reality doesn't.\n\nHere's what nobody tells you about high-income financial planning: earning more doesn't automatically mean building more.`, source: { text: "BigLaw burnout and the wealth illusion", author: "@CorpLawReality", engagement: "1,923 likes · 8h", url: "https://linkedin.com/feed/update/urn:li:activity:source002" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
-  { id: 3, text: `The S&P 500 is trading at 22x forward earnings.\n\nFor context:\n→ 10-year average: 17.6x\n→ Pre-COVID average: 15.8x\n→ Current level: 22.1x\n\nThis doesn't mean "sell everything."\nIt means your expected 10-year return from this starting point is historically ~4-6% annualized.\n\nAct accordingly.`, source: { text: "Market valuations are screaming", author: "@DataDrivenInvstr", engagement: "4,102 likes · 22h", url: "https://twitter.com/DataDrivenInvstr/status/source003" }, topic: "Market Valuations", imageHint: "Chart: S&P 500 P/E ratio vs subsequent 10-year returns", hashtags: ["#equitycomp", "#wealthmanagement", "#financialplanning"] },
-  { id: 4, text: `Hot take: Your 401(k) match isn't free money.\n\nIt's compensation you already earned, delivered in the most tax-inefficient way possible for high earners.\n\nIf your employer matches 6% into a traditional 401(k) and you're in the 37% bracket, that "free" $14K costs you ~$5,200 in future taxes.\n\nThere's a better structure. Most people don't know it exists.`, source: { text: "The 401k match myth", author: "@RetirementNerd", engagement: "1,556 likes · 6h", url: "https://linkedin.com/feed/update/urn:li:activity:source004" }, topic: "Solo 401(k)", imageHint: null, hashtags: null },
-];
-
-const REPLACEMENT_DRAFTS = [
-  { id: 101, text: `Stop maxing out your 401(k) before reading this.\n\nIf you're in the 35%+ bracket with equity comp, the traditional 401(k) max-out advice might be costing you.\n\nHere's why: every dollar you defer today gets taxed as ordinary income when you withdraw. If your tax rate stays the same (or goes up), you've just delayed the inevitable.\n\nThe alternative? A properly structured Roth strategy.`, source: { text: "The Roth backdoor nobody talks about", author: "@TaxStrategyGuy", engagement: "1,102 likes · 4h", url: "https://linkedin.com/feed/update/urn:li:activity:source101" }, topic: "Roth Conversions", imageHint: null, hashtags: null },
-  { id: 102, text: `Your financial advisor should make you uncomfortable.\n\nNot because they're pushy — because they ask questions you've been avoiding.\n\n"What happens if you get laid off with $400K in unvested RSUs?"\n"Have you modeled what your tax bill looks like if your company gets acquired?"\n"Why are you holding 60% of your net worth in one stock?"\n\nComfort is expensive in financial planning.`, source: { text: "Hard conversations with your advisor", author: "@WealthMindset_", engagement: "890 likes · 10h", url: "https://linkedin.com/feed/update/urn:li:activity:source102" }, topic: "Equity Comp", imageHint: null, hashtags: null },
-  { id: 103, text: `I ran the numbers on dollar-cost averaging vs. lump sum investing for a client last week.\n\nThe data is clear: lump sum wins about 68% of the time historically.\n\nBut here's what the data doesn't capture: the client who lump sums $500K and watches it drop 15% in month one will panic-sell. The client who DCA's over 6 months sleeps fine.\n\nThe best strategy is the one you'll actually stick with.`, source: { text: "DCA vs lump sum: the real answer", author: "@EvidenceInvestor", engagement: "2,200 likes · 12h", url: "https://linkedin.com/feed/update/urn:li:activity:source103" }, topic: "Market Valuations", imageHint: null, hashtags: null },
-  { id: 104, text: `The most expensive financial mistake I see engineers make isn't about taxes.\n\nIt's waiting.\n\nWaiting to diversify until "after the next vest."\nWaiting to start a plan until they "have more time."\nWaiting to talk to someone until they "know more."\n\nThe compounding cost of waiting 3 years on a $1M portfolio?\nRoughly $180K in lost growth at historical averages.\n\nStart now. Optimize later.`, source: { text: "The cost of financial procrastination", author: "@TechCareerCoach", engagement: "1,700 likes · 5h", url: "https://linkedin.com/feed/update/urn:li:activity:source104" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
-];
-
-const COMMENTS = [
-  { id: 1, author: "Sarah Chen", title: "VP Engineering", company: "Stripe", post: "After 8 years in tech, I finally understand why senior engineers burn out. It's not the code. It's the golden handcuffs. RSUs vest, lifestyle inflates, and suddenly you can't afford to leave...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment001", engagement: { likes: 847, comments: 156, age: "3h" }, comment: "The golden handcuffs thing is real — I see it every week with engineers at your level. The irony is that a proper equity liquidation strategy actually gives you MORE freedom, not less. Most people just don't know the 3 levers they can pull to optimize the tax hit on those vests.", snLead: true },
-  { id: 2, author: "Marcus Williams", title: "Associate Attorney", company: "Davis Polk", post: "Year 3 at a V10 firm. $245K base + $40K bonus. $180K in student loans. My net worth is technically negative. Nobody talks about this in BigLaw...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment002", engagement: { likes: 612, comments: 98, age: "5h" }, comment: "This is more common than people realize. The good news? At your income trajectory, you're probably 18-24 months from a complete financial pivot — if you have the right structure in place. The bad news? Most attorneys in your position wait 5+ years to set that up.", snLead: false },
-  { id: 3, author: "Priya Ramanathan", title: "Sr. Product Manager", company: "Google", post: "Got my first ISO grant today. 50,000 shares at $0.12 strike. My coworkers say 'just hold.' My accountant says 'it depends.' I have no idea what to do and I'm terrified of making the wrong move.", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment003", engagement: { likes: 234, comments: 67, age: "2h" }, comment: "The 'just hold' advice costs engineers real money. With ISOs at that strike price, you've got AMT exposure, a concentration risk building, and a potential exercise-and-sell strategy that could save you 6 figures in taxes over the next 3 years. The answer isn't hold or sell — it's planned liquidation on YOUR timeline.", snLead: false },
-  { id: 4, author: "Kevin Tran", title: "Staff Engineer", company: "Meta", post: "Just hit $1M net worth at 31. Mostly from FAANG RSUs. Everyone says congrats but honestly I have no idea if I'm doing this right. Should I keep holding? Diversify? I don't even have an advisor...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment004", engagement: { likes: 1203, comments: 287, age: "4h" }, comment: "Congrats on the milestone — but your instinct is right to question it. A $1M net worth concentrated in one tech stock is fundamentally different from $1M in a diversified portfolio. The risk profile is closer to a $600K portfolio in practical terms. Worth mapping out what a 12-month diversification plan looks like.", snLead: false },
-];
-
-const OUTREACH = [
-  { id: 1, name: "David Park", title: "Staff Engineer at Airbnb", profileUrl: "https://linkedin.com/in/david-park", interaction: "Replied to your comment about RSU tax optimization with 'This is exactly what I've been dealing with. Where do I even start?'", daysAgo: 1, signal: "strong", starter: "Hey David — glad that resonated. The short version: start with a concentrated stock analysis before your next vest. Most engineers at your level are leaving $30-50K on the table per year. Happy to walk you through what that looks like if you're curious." },
-  { id: 2, name: "Rachel Torres", title: "Partner Track Attorney, Kirkland & Ellis", profileUrl: "https://linkedin.com/in/rachel-torres", interaction: "Liked your post + followed you after your comment on BigLaw comp thread", daysAgo: 2, signal: "moderate", starter: "Rachel — noticed you followed after that BigLaw comp discussion. I work with a lot of attorneys at your stage navigating the partner track financially. If you ever want a second opinion on how your comp structure is working for you, I'm always happy to chat." },
-  { id: 3, name: "James Liu", title: "Engineering Manager at Tesla", profileUrl: "https://linkedin.com/in/james-liu", interaction: "Commented on your market valuation post: 'What would you actually recommend for someone 30 with $500K in concentrated TSLA stock?'", daysAgo: 1, signal: "strong", starter: "James — great question. The honest answer is it depends on your vesting schedule and tax basis, but the general framework: nobody should have more than 10-15% of their net worth in their employer's stock. Want to compare what a diversification timeline might look like for your situation?" },
-];
-
-const PERF = {
-  stats: [
-    { label: "Impressions", value: "34.2K", delta: "+18%", spark: [18, 21, 24, 28, 31, 34.2], color: C.gold },
-    { label: "Profile views", value: "891", delta: "+22%", spark: [450, 520, 610, 720, 810, 891], color: C.purple },
-    { label: "New followers", value: "+47", delta: "+14%", spark: [22, 28, 35, 38, 41, 47], color: C.green },
-    { label: "Engagement", value: "4.2%", delta: "+0.4", spark: [2.8, 3.1, 3.5, 3.8, 4.0, 4.2], color: C.blue },
-  ],
-  posts: [
-    { text: "Your RSUs aren't a bonus. They're a tax time bomb.", likes: 847, comments: 156, date: "Feb 12", topic: "RSU Taxation", mult: "3.2×", url: "https://linkedin.com/feed/update/urn:li:activity:7296001" },
-    { text: "The S&P 500 at 22x earnings means your expected return is 4-6%.", likes: 612, comments: 89, date: "Feb 10", topic: "Valuations", mult: "2.1×", url: "https://linkedin.com/feed/update/urn:li:activity:7295002" },
-    { text: "I make $350K and I'm broke — high income ≠ wealth.", likes: 523, comments: 134, date: "Feb 8", topic: "Psychology", mult: "1.8×", url: "https://linkedin.com/feed/update/urn:li:activity:7294003" },
-  ],
-  topics: [
-    { name: "RSU Taxation", avg: 520, count: 8, pct: 100, trend: "up" },
-    { name: "High-Earner Psychology", avg: 445, count: 6, pct: 85, trend: "up" },
-    { name: "Market Valuations", avg: 380, count: 5, pct: 73, trend: "flat" },
-    { name: "Solo 401(k)", avg: 290, count: 4, pct: 56, trend: "down" },
-    { name: "Roth Conversions", avg: 260, count: 3, pct: 50, trend: "flat" },
-  ],
-  commentImpact: { total: 47, replies: 18, clickRate: "12%", connections: 8 },
-};
-
-const POST_HISTORY = [
-  { id: 1, text: "Your RSUs aren't a bonus. They're a tax time bomb...", date: "Feb 12", likes: 847, comments: 156, url: "https://linkedin.com/feed/update/urn:li:activity:7296001" },
-  { id: 2, text: "The S&P 500 at 22x earnings means your expected return...", date: "Feb 10", likes: 612, comments: 89, url: "https://linkedin.com/feed/update/urn:li:activity:7295002" },
-  { id: 3, text: "I make $350K and I'm broke — why high income ≠ wealth...", date: "Feb 8", likes: 523, comments: 134, url: "https://linkedin.com/feed/update/urn:li:activity:7294003" },
-  { id: 4, text: "Hot take: Your 401(k) match isn't free money...", date: "Feb 5", likes: 445, comments: 78, url: "https://linkedin.com/feed/update/urn:li:activity:7293004" },
-  { id: 5, text: "If your financial advisor hasn't asked about stock options...", date: "Feb 3", likes: 389, comments: 92, url: "https://linkedin.com/feed/update/urn:li:activity:7292005" },
-];
-
 // ═══════════════════════════════════════════
 // DATA MAPPER — API → UI shape
 // ═══════════════════════════════════════════
@@ -302,11 +245,21 @@ function mapApiDraft(item) {
 
 function PostsView() {
   const { drafts: rawDrafts, loading, approve: apiApprove, skip: apiSkip } = useDrafts();
+  const { data: perfData } = usePerformance();
   const [showSource, setShowSource] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const [replacing, setReplacing] = useState({});
   const [copied, setCopied] = useState({});
   const [expandedApproved, setExpandedApproved] = useState({});
+
+  const postHistory = (perfData.posts || []).map(p => ({
+    id: p.id,
+    text: (p.post_text || "").substring(0, 80),
+    date: p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+    likes: p.likes || 0,
+    comments: p.comments || 0,
+    url: p.linkedin_url || "#",
+  }));
 
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
@@ -594,11 +547,11 @@ function PostsView() {
         >
           <span style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}><Icons.chevRight /></span>
           Post History
-          <span style={{ fontFamily: F.mono, fontSize: 11 }}>{POST_HISTORY.length}</span>
+          <span style={{ fontFamily: F.mono, fontSize: 11 }}>{postHistory.length}</span>
         </button>
         {showHistory && (
           <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease" }}>
-            {POST_HISTORY.map(p => (
+            {postHistory.map(p => (
               <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
                 <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px" }}
                   onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
@@ -904,75 +857,142 @@ function OutreachView() {
 // ═══════════════════════════════════════════
 
 function PerformanceView() {
-  return (
+  const { data: perfData, loading, logPerformance } = usePerformance();
+  const [logLikes, setLogLikes] = useState("");
+  const [logComments, setLogComments] = useState("");
+  const [logImpressions, setLogImpressions] = useState("");
+  const [selectedPost, setSelectedPost] = useState("");
+  const [logSaved, setLogSaved] = useState(false);
+
+  const posts = perfData.posts || [];
+  const metrics = perfData.metrics || [];
+  const commentCount = perfData.commentCount || 0;
+
+  // Build stats from latest metrics period, or show zeros
+  const latest = metrics[0] || {};
+  const prev = metrics[1] || {};
+  const delta = (cur, pre) => {
+    if (!pre || !cur) return "";
+    const diff = cur - pre;
+    if (diff === 0) return "";
+    const pct = pre > 0 ? Math.round((diff / pre) * 100) : 0;
+    return diff > 0 ? `+${pct}%` : `${pct}%`;
+  };
+
+  const stats = [
+    { label: "Impressions", value: latest.impressions ? latest.impressions.toLocaleString() : "—", delta: delta(latest.impressions, prev.impressions), color: C.gold },
+    { label: "Profile views", value: latest.profile_views ? latest.profile_views.toLocaleString() : "—", delta: delta(latest.profile_views, prev.profile_views), color: C.purple },
+    { label: "New followers", value: latest.new_followers ? `+${latest.new_followers}` : "—", delta: delta(latest.new_followers, prev.new_followers), color: C.green },
+    { label: "Engagement", value: latest.engagement_rate ? `${latest.engagement_rate}%` : "—", delta: delta(latest.engagement_rate, prev.engagement_rate), color: C.blue },
+  ];
+
+  // Comment impact from real data
+  const commentImpact = [
+    { label: "Total", value: commentCount, color: C.gold },
+    { label: "Replies", value: latest.replies_received || 0, color: C.blue },
+    { label: "Profile clicks", value: latest.profile_clicks_from_comments || 0, color: C.purple },
+    { label: "Connections", value: latest.new_connections || 0, color: C.green },
+  ];
+
+  // Compute topic breakdown from advisor_posts
+  const topicMap = {};
+  posts.forEach(p => {
+    const tags = p.topic_tags || [];
+    const tag = tags[0] || "General";
+    if (!topicMap[tag]) topicMap[tag] = { totalLikes: 0, count: 0 };
+    topicMap[tag].totalLikes += (p.likes || 0);
+    topicMap[tag].count += 1;
+  });
+  const topicList = Object.entries(topicMap).map(([name, d]) => ({
+    name, avg: d.count > 0 ? Math.round(d.totalLikes / d.count) : 0, count: d.count,
+  })).sort((a, b) => b.avg - a.avg);
+  const maxAvg = topicList.length > 0 ? topicList[0].avg : 1;
+
+  const handleLog = async () => {
+    if (!selectedPost) return;
+    try {
+      await logPerformance(selectedPost, parseInt(logLikes) || 0, parseInt(logComments) || 0);
+      setLogSaved(true);
+      setLogLikes(""); setLogComments(""); setLogImpressions(""); setSelectedPost("");
+      setTimeout(() => setLogSaved(false), 2000);
+    } catch (err) { console.error('Log failed:', err); }
+  };
+
+  if (loading) return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle sub="Last 30 days">Performance</SectionTitle>
+      <div style={{ padding: "60px 0", textAlign: "center" }}>
+        <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>Loading performance data...</p>
+      </div>
+    </div>
+  );
 
-      {/* Metrics — each has its own color */}
+  return (
+    <div style={{ animation: "enter 0.35s ease" }}>
+      <SectionTitle sub={metrics.length > 0 ? `Last 30 days · ${posts.length} posts tracked` : "Start logging to see trends"}>Performance</SectionTitle>
+
+      {/* Metrics cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: C.stroke, borderRadius: 8, overflow: "hidden", marginBottom: 48 }}>
-        {PERF.stats.map((s, i) => (
+        {stats.map((s, i) => (
           <div key={i} style={{ background: C.elevated, padding: "24px 20px", animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
             <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>{s.label}</p>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-              <div>
-                <span style={{ fontFamily: F.serif, fontSize: 30, color: C.text, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
-                <span style={{ fontSize: 12, color: C.green, marginLeft: 8, fontFamily: F.mono }}>{s.delta}</span>
-              </div>
-              <Spark data={s.spark} color={s.color} />
+            <div>
+              <span style={{ fontFamily: F.serif, fontSize: 30, color: s.value === "—" ? C.textGhost : C.text, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
+              {s.delta && <span style={{ fontSize: 12, color: C.green, marginLeft: 8, fontFamily: F.mono }}>{s.delta}</span>}
             </div>
           </div>
         ))}
       </div>
 
+      {metrics.length === 0 && posts.length === 0 && (
+        <div style={{ padding: "32px 0 48px", textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: C.textFaint }}>No performance data yet. Log post engagement below to start tracking, or add weekly metrics in Supabase.</p>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, marginBottom: 48 }}>
         {/* Top posts */}
         <div>
           <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Top posts</p>
-          {PERF.posts.map((p, i) => {
-            const tc = getTopicColor(p.topic);
+          {posts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts logged yet.</p>}
+          {posts.filter(p => p.performance_logged).sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 5).map((p, i) => {
+            const tag = (p.topic_tags || [])[0] || "General";
+            const tc = getTopicColor(tag);
+            const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
             return (
-              <a key={i} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
-                <div style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, cursor: "pointer", borderRadius: 4, margin: "0 -8px", transition: "background 0.15s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, marginRight: 16 }}>
-                    <p style={{ fontSize: 14, color: C.text, lineHeight: 1.5, marginBottom: 6 }}>{p.text}</p>
+                    <p style={{ fontSize: 14, color: C.text, lineHeight: 1.5, marginBottom: 6 }}>{(p.post_text || "").substring(0, 80)}...</p>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <span style={{ fontSize: 11, color: C.textGhost }}>{p.date}</span>
-                      <Tag color={tc.fg} bg={tc.bg}>{p.topic}</Tag>
-                      <span style={{ color: C.textGhost, display: "flex" }}><Icons.external /></span>
+                      <span style={{ fontSize: 11, color: C.textGhost }}>{date}</span>
+                      <Tag color={tc.fg} bg={tc.bg}>{tag}</Tag>
+                      {p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }}><Icons.external /></a>}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    <span style={{ fontFamily: F.serif, fontSize: 22, color: C.gold }}>{p.mult}</span>
-                    <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes} · {p.comments}</p>
+                    <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes || 0} · {p.comments || 0}</p>
                   </div>
                 </div>
-                </div>
-              </a>
+              </div>
             );
           })}
         </div>
 
-        {/* Topics — colored bars */}
+        {/* Topics breakdown */}
         <div>
           <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>By topic</p>
-          {PERF.topics.map((t, i) => {
+          {topicList.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>Topics appear as you log posts.</p>}
+          {topicList.map((t, i) => {
             const tc = getTopicColor(t.name);
-            const trendColor = t.trend === "up" ? C.green : t.trend === "down" ? C.coral : C.textFaint;
-            const trendIcon = t.trend === "up" ? "↑" : t.trend === "down" ? "↓" : "—";
             return (
               <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                   <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{t.name}</span>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{t.avg} avg · {t.count}</span>
-                    <span style={{ fontSize: 12, color: trendColor, fontWeight: 600 }}>{trendIcon}</span>
-                  </div>
+                  <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{t.avg} avg · {t.count}</span>
                 </div>
                 <div style={{ height: 4, background: C.stroke, borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${t.pct}%`, background: tc.fg, borderRadius: 2, transition: "width 1s ease", opacity: 0.7 }} />
+                  <div style={{ height: "100%", width: `${maxAvg > 0 ? (t.avg / maxAvg) * 100 : 0}%`, background: tc.fg, borderRadius: 2, transition: "width 1s ease", opacity: 0.7 }} />
                 </div>
               </div>
             );
@@ -984,12 +1004,7 @@ function PerformanceView() {
       <div style={{ marginBottom: 48 }}>
         <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Comment impact</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: C.stroke, borderRadius: 8, overflow: "hidden" }}>
-          {[
-            { label: "Total", value: PERF.commentImpact.total, color: C.gold },
-            { label: "Replies", value: PERF.commentImpact.replies, color: C.blue },
-            { label: "Profile clicks", value: PERF.commentImpact.clickRate, color: C.purple },
-            { label: "Connections", value: PERF.commentImpact.connections, color: C.green },
-          ].map((m, i) => (
+          {commentImpact.map((m, i) => (
             <div key={i} style={{ background: C.elevated, padding: "18px 16px", textAlign: "center" }}>
               <span style={{ fontFamily: F.serif, fontSize: 22, color: m.color }}>{m.value}</span>
               <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, marginTop: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>{m.label}</p>
@@ -1005,20 +1020,24 @@ function PerformanceView() {
       <div style={{ display: "flex", gap: 14, alignItems: "flex-end" }}>
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Post</label>
-          <select style={{ width: "100%", background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 14px", fontSize: 13, fontFamily: F.sans }}>
-            <option>Select a recent post...</option>
-            {POST_HISTORY.slice(0, 3).map((p, i) => <option key={i}>{p.text.substring(0, 55)}...</option>)}
+          <select value={selectedPost} onChange={e => setSelectedPost(e.target.value)} style={{ width: "100%", background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 14px", fontSize: 13, fontFamily: F.sans }}>
+            <option value="">Select a recent post...</option>
+            {posts.filter(p => !p.performance_logged).map(p => (
+              <option key={p.id} value={p.id}>{(p.post_text || "").substring(0, 55)}...</option>
+            ))}
           </select>
         </div>
         <div>
           <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Likes</label>
-          <input placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
+          <input value={logLikes} onChange={e => setLogLikes(e.target.value)} placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
         </div>
         <div>
           <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Comments</label>
-          <input placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
+          <input value={logComments} onChange={e => setLogComments(e.target.value)} placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
         </div>
-        <Btn primary style={{ padding: "10px 20px" }}>Log</Btn>
+        <Btn primary onClick={handleLog} style={{ padding: "10px 20px" }}>
+          {logSaved ? <><Icons.check /> Saved</> : "Log"}
+        </Btn>
       </div>
     </div>
   );
@@ -1338,12 +1357,23 @@ function VoiceForm({ profile, updateField, onSave, saving, saved }) {
 }
 
 function HistoryForm() {
+  const { data: perfData, loading } = usePerformance();
+  const posts = (perfData.posts || []).map(p => ({
+    id: p.id,
+    text: (p.post_text || "").substring(0, 80),
+    date: p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+    likes: p.likes || 0,
+    comments: p.comments || 0,
+    url: p.linkedin_url || "#",
+  }));
+
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-      <p style={{ fontSize: 12, color: C.textFaint }}>Auto-synced from LinkedIn · Last sync 2h ago · {POST_HISTORY.length} posts</p>
-      <Btn><Icons.sync /> Sync</Btn>
+      <p style={{ fontSize: 12, color: C.textFaint }}>{posts.length} posts tracked</p>
     </div>
-    {POST_HISTORY.map(p => (
+    {loading && <p style={{ fontSize: 12, color: C.textFaint }}>Loading...</p>}
+    {!loading && posts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts logged yet. Posts appear here after you log performance.</p>}
+    {posts.map(p => (
       <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
         <div style={{ padding: "14px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderRadius: 4, margin: "0 -8px", transition: "background 0.15s" }}
           onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
