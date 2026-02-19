@@ -206,6 +206,7 @@ const Icons = {
   chevRight: () => <I d="M9 18l6-6-6-6" />,
   sync: () => <I d="M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0114.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0020.49 15" />,
   image: () => <I d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z M8.5 10a1.5 1.5 0 100-3 1.5 1.5 0 000 3z M21 15l-5-5L5 21" />,
+  play: () => <I d="M5 3l14 9-14 9V3z" />,
 };
 
 // ═══════════════════════════════════════════
@@ -213,30 +214,30 @@ const Icons = {
 // ═══════════════════════════════════════════
 
 const DRAFTS = [
-  { id: 1, text: `Your RSUs aren't a bonus.\nThey're a tax time bomb.\n\nI see this every week: engineers at $200K+ comp sitting on 6 figures of company stock, treating vesting dates like paydays.\n\nMeanwhile they're:\n→ Paying 40%+ effective tax on every vest\n→ Holding concentrated positions they'd never buy on purpose\n→ Missing the 83(b) election window entirely\n\nThe fix isn't complicated. But it requires planning BEFORE vesting day, not after.`, source: { text: "Why I sold all my RSUs the day they vested", author: "@SeniorEng_FAANG", engagement: "2,847 likes · 14h" }, topic: "RSU Taxation", imageHint: "Chart: RSU tax impact at different income levels", hashtags: null },
-  { id: 2, text: `"I make $350K and I'm broke."\n\nI hear this from attorneys more than anyone.\n\nBigLaw salary. Student loans. Lifestyle inflation. Golden handcuffs.\n\nThe math looks good on paper. The reality doesn't.\n\nHere's what nobody tells you about high-income financial planning: earning more doesn't automatically mean building more.`, source: { text: "BigLaw burnout and the wealth illusion", author: "@CorpLawReality", engagement: "1,923 likes · 8h" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
-  { id: 3, text: `The S&P 500 is trading at 22x forward earnings.\n\nFor context:\n→ 10-year average: 17.6x\n→ Pre-COVID average: 15.8x\n→ Current level: 22.1x\n\nThis doesn't mean "sell everything."\nIt means your expected 10-year return from this starting point is historically ~4-6% annualized.\n\nAct accordingly.`, source: { text: "Market valuations are screaming", author: "@DataDrivenInvstr", engagement: "4,102 likes · 22h" }, topic: "Market Valuations", imageHint: "Chart: S&P 500 P/E ratio vs subsequent 10-year returns", hashtags: ["#equitycomp", "#wealthmanagement", "#financialplanning"] },
-  { id: 4, text: `Hot take: Your 401(k) match isn't free money.\n\nIt's compensation you already earned, delivered in the most tax-inefficient way possible for high earners.\n\nIf your employer matches 6% into a traditional 401(k) and you're in the 37% bracket, that "free" $14K costs you ~$5,200 in future taxes.\n\nThere's a better structure. Most people don't know it exists.`, source: { text: "The 401k match myth", author: "@RetirementNerd", engagement: "1,556 likes · 6h" }, topic: "Solo 401(k)", imageHint: null, hashtags: null },
+  { id: 1, text: `Your RSUs aren't a bonus.\nThey're a tax time bomb.\n\nI see this every week: engineers at $200K+ comp sitting on 6 figures of company stock, treating vesting dates like paydays.\n\nMeanwhile they're:\n→ Paying 40%+ effective tax on every vest\n→ Holding concentrated positions they'd never buy on purpose\n→ Missing the 83(b) election window entirely\n\nThe fix isn't complicated. But it requires planning BEFORE vesting day, not after.`, source: { text: "Why I sold all my RSUs the day they vested", author: "@SeniorEng_FAANG", engagement: "2,847 likes · 14h", url: "https://linkedin.com/feed/update/urn:li:activity:source001" }, topic: "RSU Taxation", imageHint: "Chart: RSU tax impact at different income levels", hashtags: null },
+  { id: 2, text: `"I make $350K and I'm broke."\n\nI hear this from attorneys more than anyone.\n\nBigLaw salary. Student loans. Lifestyle inflation. Golden handcuffs.\n\nThe math looks good on paper. The reality doesn't.\n\nHere's what nobody tells you about high-income financial planning: earning more doesn't automatically mean building more.`, source: { text: "BigLaw burnout and the wealth illusion", author: "@CorpLawReality", engagement: "1,923 likes · 8h", url: "https://linkedin.com/feed/update/urn:li:activity:source002" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
+  { id: 3, text: `The S&P 500 is trading at 22x forward earnings.\n\nFor context:\n→ 10-year average: 17.6x\n→ Pre-COVID average: 15.8x\n→ Current level: 22.1x\n\nThis doesn't mean "sell everything."\nIt means your expected 10-year return from this starting point is historically ~4-6% annualized.\n\nAct accordingly.`, source: { text: "Market valuations are screaming", author: "@DataDrivenInvstr", engagement: "4,102 likes · 22h", url: "https://twitter.com/DataDrivenInvstr/status/source003" }, topic: "Market Valuations", imageHint: "Chart: S&P 500 P/E ratio vs subsequent 10-year returns", hashtags: ["#equitycomp", "#wealthmanagement", "#financialplanning"] },
+  { id: 4, text: `Hot take: Your 401(k) match isn't free money.\n\nIt's compensation you already earned, delivered in the most tax-inefficient way possible for high earners.\n\nIf your employer matches 6% into a traditional 401(k) and you're in the 37% bracket, that "free" $14K costs you ~$5,200 in future taxes.\n\nThere's a better structure. Most people don't know it exists.`, source: { text: "The 401k match myth", author: "@RetirementNerd", engagement: "1,556 likes · 6h", url: "https://linkedin.com/feed/update/urn:li:activity:source004" }, topic: "Solo 401(k)", imageHint: null, hashtags: null },
 ];
 
 const REPLACEMENT_DRAFTS = [
-  { id: 101, text: `Stop maxing out your 401(k) before reading this.\n\nIf you're in the 35%+ bracket with equity comp, the traditional 401(k) max-out advice might be costing you.\n\nHere's why: every dollar you defer today gets taxed as ordinary income when you withdraw. If your tax rate stays the same (or goes up), you've just delayed the inevitable.\n\nThe alternative? A properly structured Roth strategy.`, source: { text: "The Roth backdoor nobody talks about", author: "@TaxStrategyGuy", engagement: "1,102 likes · 4h" }, topic: "Roth Conversions", imageHint: null, hashtags: null },
-  { id: 102, text: `Your financial advisor should make you uncomfortable.\n\nNot because they're pushy — because they ask questions you've been avoiding.\n\n"What happens if you get laid off with $400K in unvested RSUs?"\n"Have you modeled what your tax bill looks like if your company gets acquired?"\n"Why are you holding 60% of your net worth in one stock?"\n\nComfort is expensive in financial planning.`, source: { text: "Hard conversations with your advisor", author: "@WealthMindset_", engagement: "890 likes · 10h" }, topic: "Equity Comp", imageHint: null, hashtags: null },
-  { id: 103, text: `I ran the numbers on dollar-cost averaging vs. lump sum investing for a client last week.\n\nThe data is clear: lump sum wins about 68% of the time historically.\n\nBut here's what the data doesn't capture: the client who lump sums $500K and watches it drop 15% in month one will panic-sell. The client who DCA's over 6 months sleeps fine.\n\nThe best strategy is the one you'll actually stick with.`, source: { text: "DCA vs lump sum: the real answer", author: "@EvidenceInvestor", engagement: "2,200 likes · 12h" }, topic: "Market Valuations", imageHint: null, hashtags: null },
-  { id: 104, text: `The most expensive financial mistake I see engineers make isn't about taxes.\n\nIt's waiting.\n\nWaiting to diversify until "after the next vest."\nWaiting to start a plan until they "have more time."\nWaiting to talk to someone until they "know more."\n\nThe compounding cost of waiting 3 years on a $1M portfolio?\nRoughly $180K in lost growth at historical averages.\n\nStart now. Optimize later.`, source: { text: "The cost of financial procrastination", author: "@TechCareerCoach", engagement: "1,700 likes · 5h" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
+  { id: 101, text: `Stop maxing out your 401(k) before reading this.\n\nIf you're in the 35%+ bracket with equity comp, the traditional 401(k) max-out advice might be costing you.\n\nHere's why: every dollar you defer today gets taxed as ordinary income when you withdraw. If your tax rate stays the same (or goes up), you've just delayed the inevitable.\n\nThe alternative? A properly structured Roth strategy.`, source: { text: "The Roth backdoor nobody talks about", author: "@TaxStrategyGuy", engagement: "1,102 likes · 4h", url: "https://linkedin.com/feed/update/urn:li:activity:source101" }, topic: "Roth Conversions", imageHint: null, hashtags: null },
+  { id: 102, text: `Your financial advisor should make you uncomfortable.\n\nNot because they're pushy — because they ask questions you've been avoiding.\n\n"What happens if you get laid off with $400K in unvested RSUs?"\n"Have you modeled what your tax bill looks like if your company gets acquired?"\n"Why are you holding 60% of your net worth in one stock?"\n\nComfort is expensive in financial planning.`, source: { text: "Hard conversations with your advisor", author: "@WealthMindset_", engagement: "890 likes · 10h", url: "https://linkedin.com/feed/update/urn:li:activity:source102" }, topic: "Equity Comp", imageHint: null, hashtags: null },
+  { id: 103, text: `I ran the numbers on dollar-cost averaging vs. lump sum investing for a client last week.\n\nThe data is clear: lump sum wins about 68% of the time historically.\n\nBut here's what the data doesn't capture: the client who lump sums $500K and watches it drop 15% in month one will panic-sell. The client who DCA's over 6 months sleeps fine.\n\nThe best strategy is the one you'll actually stick with.`, source: { text: "DCA vs lump sum: the real answer", author: "@EvidenceInvestor", engagement: "2,200 likes · 12h", url: "https://linkedin.com/feed/update/urn:li:activity:source103" }, topic: "Market Valuations", imageHint: null, hashtags: null },
+  { id: 104, text: `The most expensive financial mistake I see engineers make isn't about taxes.\n\nIt's waiting.\n\nWaiting to diversify until "after the next vest."\nWaiting to start a plan until they "have more time."\nWaiting to talk to someone until they "know more."\n\nThe compounding cost of waiting 3 years on a $1M portfolio?\nRoughly $180K in lost growth at historical averages.\n\nStart now. Optimize later.`, source: { text: "The cost of financial procrastination", author: "@TechCareerCoach", engagement: "1,700 likes · 5h", url: "https://linkedin.com/feed/update/urn:li:activity:source104" }, topic: "High-Earner Psychology", imageHint: null, hashtags: null },
 ];
 
 const COMMENTS = [
-  { id: 1, author: "Sarah Chen", title: "VP Engineering", company: "Stripe", post: "After 8 years in tech, I finally understand why senior engineers burn out. It's not the code. It's the golden handcuffs. RSUs vest, lifestyle inflates, and suddenly you can't afford to leave...", engagement: { likes: 847, comments: 156, age: "3h" }, comment: "The golden handcuffs thing is real — I see it every week with engineers at your level. The irony is that a proper equity liquidation strategy actually gives you MORE freedom, not less. Most people just don't know the 3 levers they can pull to optimize the tax hit on those vests.", snLead: true },
-  { id: 2, author: "Marcus Williams", title: "Associate Attorney", company: "Davis Polk", post: "Year 3 at a V10 firm. $245K base + $40K bonus. $180K in student loans. My net worth is technically negative. Nobody talks about this in BigLaw...", engagement: { likes: 612, comments: 98, age: "5h" }, comment: "This is more common than people realize. The good news? At your income trajectory, you're probably 18-24 months from a complete financial pivot — if you have the right structure in place. The bad news? Most attorneys in your position wait 5+ years to set that up.", snLead: false },
-  { id: 3, author: "Priya Ramanathan", title: "Sr. Product Manager", company: "Google", post: "Got my first ISO grant today. 50,000 shares at $0.12 strike. My coworkers say 'just hold.' My accountant says 'it depends.' I have no idea what to do and I'm terrified of making the wrong move.", engagement: { likes: 234, comments: 67, age: "2h" }, comment: "The 'just hold' advice costs engineers real money. With ISOs at that strike price, you've got AMT exposure, a concentration risk building, and a potential exercise-and-sell strategy that could save you 6 figures in taxes over the next 3 years. The answer isn't hold or sell — it's planned liquidation on YOUR timeline.", snLead: false },
-  { id: 4, author: "Kevin Tran", title: "Staff Engineer", company: "Meta", post: "Just hit $1M net worth at 31. Mostly from FAANG RSUs. Everyone says congrats but honestly I have no idea if I'm doing this right. Should I keep holding? Diversify? I don't even have an advisor...", engagement: { likes: 1203, comments: 287, age: "4h" }, comment: "Congrats on the milestone — but your instinct is right to question it. A $1M net worth concentrated in one tech stock is fundamentally different from $1M in a diversified portfolio. The risk profile is closer to a $600K portfolio in practical terms. Worth mapping out what a 12-month diversification plan looks like.", snLead: false },
+  { id: 1, author: "Sarah Chen", title: "VP Engineering", company: "Stripe", post: "After 8 years in tech, I finally understand why senior engineers burn out. It's not the code. It's the golden handcuffs. RSUs vest, lifestyle inflates, and suddenly you can't afford to leave...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment001", engagement: { likes: 847, comments: 156, age: "3h" }, comment: "The golden handcuffs thing is real — I see it every week with engineers at your level. The irony is that a proper equity liquidation strategy actually gives you MORE freedom, not less. Most people just don't know the 3 levers they can pull to optimize the tax hit on those vests.", snLead: true },
+  { id: 2, author: "Marcus Williams", title: "Associate Attorney", company: "Davis Polk", post: "Year 3 at a V10 firm. $245K base + $40K bonus. $180K in student loans. My net worth is technically negative. Nobody talks about this in BigLaw...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment002", engagement: { likes: 612, comments: 98, age: "5h" }, comment: "This is more common than people realize. The good news? At your income trajectory, you're probably 18-24 months from a complete financial pivot — if you have the right structure in place. The bad news? Most attorneys in your position wait 5+ years to set that up.", snLead: false },
+  { id: 3, author: "Priya Ramanathan", title: "Sr. Product Manager", company: "Google", post: "Got my first ISO grant today. 50,000 shares at $0.12 strike. My coworkers say 'just hold.' My accountant says 'it depends.' I have no idea what to do and I'm terrified of making the wrong move.", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment003", engagement: { likes: 234, comments: 67, age: "2h" }, comment: "The 'just hold' advice costs engineers real money. With ISOs at that strike price, you've got AMT exposure, a concentration risk building, and a potential exercise-and-sell strategy that could save you 6 figures in taxes over the next 3 years. The answer isn't hold or sell — it's planned liquidation on YOUR timeline.", snLead: false },
+  { id: 4, author: "Kevin Tran", title: "Staff Engineer", company: "Meta", post: "Just hit $1M net worth at 31. Mostly from FAANG RSUs. Everyone says congrats but honestly I have no idea if I'm doing this right. Should I keep holding? Diversify? I don't even have an advisor...", postUrl: "https://linkedin.com/feed/update/urn:li:activity:comment004", engagement: { likes: 1203, comments: 287, age: "4h" }, comment: "Congrats on the milestone — but your instinct is right to question it. A $1M net worth concentrated in one tech stock is fundamentally different from $1M in a diversified portfolio. The risk profile is closer to a $600K portfolio in practical terms. Worth mapping out what a 12-month diversification plan looks like.", snLead: false },
 ];
 
 const OUTREACH = [
-  { id: 1, name: "David Park", title: "Staff Engineer at Airbnb", interaction: "Replied to your comment about RSU tax optimization with 'This is exactly what I've been dealing with. Where do I even start?'", daysAgo: 1, signal: "strong", starter: "Hey David — glad that resonated. The short version: start with a concentrated stock analysis before your next vest. Most engineers at your level are leaving $30-50K on the table per year. Happy to walk you through what that looks like if you're curious." },
-  { id: 2, name: "Rachel Torres", title: "Partner Track Attorney, Kirkland & Ellis", interaction: "Liked your post + followed you after your comment on BigLaw comp thread", daysAgo: 2, signal: "moderate", starter: "Rachel — noticed you followed after that BigLaw comp discussion. I work with a lot of attorneys at your stage navigating the partner track financially. If you ever want a second opinion on how your comp structure is working for you, I'm always happy to chat." },
-  { id: 3, name: "James Liu", title: "Engineering Manager at Tesla", interaction: "Commented on your market valuation post: 'What would you actually recommend for someone 30 with $500K in concentrated TSLA stock?'", daysAgo: 1, signal: "strong", starter: "James — great question. The honest answer is it depends on your vesting schedule and tax basis, but the general framework: nobody should have more than 10-15% of their net worth in their employer's stock. Want to compare what a diversification timeline might look like for your situation?" },
+  { id: 1, name: "David Park", title: "Staff Engineer at Airbnb", profileUrl: "https://linkedin.com/in/david-park", interaction: "Replied to your comment about RSU tax optimization with 'This is exactly what I've been dealing with. Where do I even start?'", daysAgo: 1, signal: "strong", starter: "Hey David — glad that resonated. The short version: start with a concentrated stock analysis before your next vest. Most engineers at your level are leaving $30-50K on the table per year. Happy to walk you through what that looks like if you're curious." },
+  { id: 2, name: "Rachel Torres", title: "Partner Track Attorney, Kirkland & Ellis", profileUrl: "https://linkedin.com/in/rachel-torres", interaction: "Liked your post + followed you after your comment on BigLaw comp thread", daysAgo: 2, signal: "moderate", starter: "Rachel — noticed you followed after that BigLaw comp discussion. I work with a lot of attorneys at your stage navigating the partner track financially. If you ever want a second opinion on how your comp structure is working for you, I'm always happy to chat." },
+  { id: 3, name: "James Liu", title: "Engineering Manager at Tesla", profileUrl: "https://linkedin.com/in/james-liu", interaction: "Commented on your market valuation post: 'What would you actually recommend for someone 30 with $500K in concentrated TSLA stock?'", daysAgo: 1, signal: "strong", starter: "James — great question. The honest answer is it depends on your vesting schedule and tax basis, but the general framework: nobody should have more than 10-15% of their net worth in their employer's stock. Want to compare what a diversification timeline might look like for your situation?" },
 ];
 
 const PERF = {
@@ -440,7 +441,7 @@ function PostsView() {
                 </div>
               )}
 
-              {/* Source — collapsible */}
+              {/* Source — collapsible, with link to original */}
               <button onClick={() => setShowSource(s => ({ ...s, [draft.id]: !s[draft.id] }))}
                 style={{
                   background: "none", border: "none", cursor: "pointer",
@@ -464,6 +465,15 @@ function PostsView() {
                     {draft.source.engagement}
                   </p>
                   <p style={{ fontSize: 13, color: C.textFaint, fontStyle: "italic", marginTop: 4 }}>"{draft.source.text}"</p>
+                  {draft.source.url && (
+                    <a href={draft.source.url} target="_blank" rel="noopener noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.textGhost, marginTop: 8, textDecoration: "none", transition: "color 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.color = C.gold}
+                      onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
+                    >
+                      <Icons.external /> View original post
+                    </a>
+                  )}
                 </div>
               )}
 
@@ -546,7 +556,7 @@ function PostsView() {
           <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease" }}>
             {POST_HISTORY.map(p => (
               <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
-                <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px", padding: "12px 8px" }}
+                <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px" }}
                   onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
                   onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                   <span style={{ fontSize: 13, color: C.textSoft, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 16 }}>{p.text}</span>
@@ -577,15 +587,18 @@ function CommentsView() {
   const completed = Object.keys(done).length;
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
-  const handleOpenOnLinkedIn = () => {
+  const handleCopyAndOpen = () => {
     if (!current) return;
     navigator.clipboard.writeText(current.comment).then(() => {
       setCopiedComment(true);
       setTimeout(() => {
+        window.open(current.postUrl, "_blank");
         setCopiedComment(false);
         setDone(d => ({ ...d, [current.id]: true }));
-      }, 1200);
+      }, 800);
     }).catch(() => {
+      // Fallback: open link even if clipboard fails
+      window.open(current.postUrl, "_blank");
       setDone(d => ({ ...d, [current.id]: true }));
     });
   };
@@ -643,7 +656,7 @@ function CommentsView() {
             {current.comment}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn primary onClick={handleOpenOnLinkedIn}>
+            <Btn primary onClick={handleCopyAndOpen}>
               {copiedComment ? <><Icons.check /> Copied — opening LinkedIn</> : <><Icons.external /> Copy &amp; Open on LinkedIn</>}
             </Btn>
             <Btn ghost onClick={() => setDone(d => ({ ...d, [current.id]: true }))}>Next</Btn>
@@ -680,7 +693,19 @@ function CommentsView() {
 
 function OutreachView() {
   const [messaged, setMessaged] = useState({});
+  const [copiedStarter, setCopiedStarter] = useState({});
   const active = OUTREACH.filter(o => !messaged[o.id]);
+
+  const handleOpenProfile = (lead) => {
+    window.open(lead.profileUrl, "_blank");
+  };
+
+  const handleCopyMessage = (lead) => {
+    navigator.clipboard.writeText(lead.starter).then(() => {
+      setCopiedStarter(c => ({ ...c, [lead.id]: true }));
+      setTimeout(() => setCopiedStarter(c => ({ ...c, [lead.id]: false })), 2000);
+    }).catch(() => {});
+  };
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
@@ -713,8 +738,10 @@ function OutreachView() {
           </div>
 
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn primary onClick={() => setMessaged(m => ({ ...m, [lead.id]: true }))}><Icons.external /> Open Profile</Btn>
-            <Btn><Icons.copy /> Copy Message</Btn>
+            <Btn primary onClick={() => handleOpenProfile(lead)}><Icons.external /> Open Profile</Btn>
+            <Btn onClick={() => handleCopyMessage(lead)}>
+              {copiedStarter[lead.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy Message</>}
+            </Btn>
             <Btn ghost onClick={() => setMessaged(m => ({ ...m, [lead.id]: true }))}>Dismiss</Btn>
           </div>
         </div>
@@ -925,7 +952,7 @@ function ProfileView() {
             {tab === "bio" && <BioForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "icp" && <ICPForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "rules" && <RulesForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
-            {tab === "voice" && <VoiceForm />}
+            {tab === "voice" && <VoiceForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "history" && <HistoryForm />}
             {tab === "compliance" && <ComplianceForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
           </>
@@ -1132,7 +1159,7 @@ function RulesForm({ profile, updateField, onSave, saving, saved }) {
   </div>);
 }
 
-function VoiceForm() {
+function VoiceForm({ profile, updateField, onSave, saving, saved }) {
   const [showAdd, setShowAdd] = useState(false);
   return (<div style={{ animation: "fadeIn 0.2s ease" }}>
     <Field label="Post Voice Samples" hint="Your real LinkedIn posts — the AI learns your writing style from these">
@@ -1153,6 +1180,11 @@ function VoiceForm() {
       <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginBottom: 12 }}>2 samples</p>
       <Btn>+ Add Sample</Btn>
     </Field>
+    <Separator />
+    <Field label="Voice Notes" hint="Free-form style rules, preferences, and guidelines that shape how AI generates your content. Write in your own words — these are fed directly into every draft and comment generation.">
+      <Input multiline rows={8} value={profile.voice_notes} onChange={v => updateField("voice_notes", v)} placeholder="e.g. Never use exclamation marks. Always lead with a specific dollar amount or stat when possible. My humor is dry and deadpan — never use 'LOL' or emojis. Refer to my audience as 'high earners' not 'wealthy individuals'..." />
+    </Field>
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
   </div>);
 }
 
@@ -1198,6 +1230,8 @@ function SettingsView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [running, setRunning] = useState({});
+  const [runResult, setRunResult] = useState({});
 
   useEffect(() => {
     fetch("/api/profile")
@@ -1230,6 +1264,27 @@ function SettingsView() {
     }
   };
 
+  const handleRunPipeline = async (type) => {
+    const endpoints = {
+      "Content scrape": "/api/scrape/content",
+      "Comment scrape": "/api/scrape/comments",
+      "Post history sync": "/api/scrape/content", // reuse content endpoint for now
+    };
+    setRunning(r => ({ ...r, [type]: true }));
+    setRunResult(r => ({ ...r, [type]: null }));
+    try {
+      const res = await fetch(endpoints[type], { method: "POST" });
+      const data = await res.json();
+      setRunResult(r => ({ ...r, [type]: res.ok ? "success" : "error" }));
+      setTimeout(() => setRunResult(r => ({ ...r, [type]: null })), 4000);
+    } catch (err) {
+      setRunResult(r => ({ ...r, [type]: "error" }));
+      setTimeout(() => setRunResult(r => ({ ...r, [type]: null })), 4000);
+    } finally {
+      setRunning(r => ({ ...r, [type]: false }));
+    }
+  };
+
   if (loading) return <div style={{ animation: "enter 0.35s ease", maxWidth: 540 }}><SectionTitle sub="Pipeline configuration and operational settings">Settings</SectionTitle><p style={{ color: C.textFaint, fontSize: 13 }}>Loading...</p></div>;
 
   return (
@@ -1249,8 +1304,22 @@ function SettingsView() {
         <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Pipeline</p>
         {[{ name: "Content scrape", time: "Today 6:00 AM" }, { name: "Comment scrape", time: "Today 7:00 AM" }, { name: "Post history sync", time: "Today 5:30 AM" }].map(p => (
           <div key={p.name} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ width: 5, height: 5, borderRadius: "50%", background: C.green, boxShadow: `0 0 4px ${C.green}40` }} /><span style={{ fontSize: 13, color: C.textSoft }}>{p.name}</span></div>
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.time}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: runResult[p.name] === "error" ? C.coral : C.green, boxShadow: `0 0 4px ${runResult[p.name] === "error" ? C.coral : C.green}40` }} />
+              <span style={{ fontSize: 13, color: C.textSoft }}>{p.name}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.time}</span>
+              {runResult[p.name] === "success" ? (
+                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.green }}>✓ Done</span>
+              ) : runResult[p.name] === "error" ? (
+                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>✗ Error</span>
+              ) : (
+                <Btn ghost onClick={() => handleRunPipeline(p.name)} style={{ padding: "5px 12px", fontSize: 11, opacity: running[p.name] ? 0.5 : 1 }}>
+                  {running[p.name] ? "Running..." : <><Icons.play /> Run</>}
+                </Btn>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -1271,37 +1340,68 @@ function SettingsView() {
 }
 
 // ═══════════════════════════════════════════
-// LEFT RAIL
+// LEFT RAIL — Expand on hover with labels
 // ═══════════════════════════════════════════
 
+const RAIL_COLLAPSED = 60;
+const RAIL_EXPANDED = 180;
+
 function Rail({ view, setView }) {
+  const [expanded, setExpanded] = useState(false);
+  const railWidth = expanded ? RAIL_EXPANDED : RAIL_COLLAPSED;
+
   const main = [
-    { id: "posts", icon: Icons.posts }, { id: "comments", icon: Icons.comments },
-    { id: "outreach", icon: Icons.outreach }, { id: "performance", icon: Icons.performance },
+    { id: "posts", icon: Icons.posts, label: "Posts" },
+    { id: "comments", icon: Icons.comments, label: "Comments" },
+    { id: "outreach", icon: Icons.outreach, label: "Outreach" },
+    { id: "performance", icon: Icons.performance, label: "Performance" },
   ];
-  function NavItem({ id, icon: Ic }) {
+
+  function NavItem({ id, icon: Ic, label }) {
     const active = view === id;
     const [h, setH] = useState(false);
     return (
       <button onClick={() => setView(id)} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
-        style={{ width: RAIL_W, height: 48, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", cursor: "pointer", position: "relative", color: active ? C.gold : h ? C.textSoft : C.textGhost, transition: "color 0.15s" }}>
-        {active && <div style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 2, background: C.gold, borderRadius: "0 2px 2px 0", boxShadow: `0 0 8px ${C.gold}30` }} />}
+        style={{
+          width: "100%", height: 44, display: "flex", alignItems: "center",
+          paddingLeft: 20, gap: 14,
+          background: "none", border: "none", cursor: "pointer", position: "relative",
+          color: active ? C.gold : h ? C.textSoft : C.textGhost, transition: "color 0.15s",
+        }}>
+        {active && <div style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 2, background: C.gold, borderRadius: "0 2px 2px 0", boxShadow: `0 0 8px ${C.gold}30` }} />}
         <Ic />
+        {expanded && (
+          <span style={{ fontSize: 13, fontFamily: F.sans, fontWeight: active ? 500 : 400, whiteSpace: "nowrap", opacity: expanded ? 1 : 0, transition: "opacity 0.15s" }}>
+            {label}
+          </span>
+        )}
       </button>
     );
   }
+
   return (
-    <div style={{ width: RAIL_W, height: "100vh", background: C.recessed, borderRight: `1px solid ${C.stroke}`, position: "fixed", left: 0, top: 0, display: "flex", flexDirection: "column", alignItems: "center", zIndex: 200 }}>
-      <div style={{ width: RAIL_W, height: 60, display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 28, height: 28, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 20px rgba(200,169,110,0.15)` }}>
+    <div
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      style={{
+        width: railWidth, height: "100vh", background: C.recessed,
+        borderRight: `1px solid ${C.stroke}`, position: "fixed", left: 0, top: 0,
+        display: "flex", flexDirection: "column", zIndex: 200,
+        transition: "width 0.2s ease", overflow: "hidden",
+      }}>
+      <div style={{ width: "100%", height: 60, display: "flex", alignItems: "center", paddingLeft: 16, gap: 12 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 20px rgba(200,169,110,0.15)`, flexShrink: 0 }}>
           <span style={{ fontFamily: F.serif, fontSize: 16, fontWeight: 500, color: C.base }}>P</span>
         </div>
+        {expanded && (
+          <span style={{ fontFamily: F.serif, fontSize: 17, fontWeight: 500, color: C.text, whiteSpace: "nowrap", opacity: expanded ? 1 : 0, transition: "opacity 0.15s" }}>The Pulse</span>
+        )}
       </div>
-      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>{main.map(n => <NavItem key={n.id} {...n} />)}</div>
+      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 2 }}>{main.map(n => <NavItem key={n.id} {...n} />)}</div>
       <div style={{ flex: 1 }} />
-      <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 4 }}>
-        <NavItem id="profile" icon={Icons.user} />
-        <NavItem id="settings" icon={Icons.settings} />
+      <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 2 }}>
+        <NavItem id="profile" icon={Icons.user} label="Profile" />
+        <NavItem id="settings" icon={Icons.settings} label="Settings" />
       </div>
     </div>
   );
