@@ -1,6 +1,6 @@
 // POST /api/scrape/comments — Run comment pipeline
 import { createServerClient } from '../../../lib/supabase';
-import { scrapeLinkedInCommentFeed } from '../../../lib/scraper';
+import { scrapeLinkedInCommentFeed, scrapeLinkedInContent } from '../../../lib/scraper';
 import { scoreComment, generateComment } from '../../../lib/ai';
 
 export const config = {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     console.log(`[Comments] Running with ${keywords.length}/${allKeywords.length} keywords:`, keywords);
 
     // Scrape
-    const posts = await scrapeLinkedInCommentFeed(keywords);
+    const posts = await scrapeLinkedInContent(keywords);
     console.log(`[Comments] Scraper returned ${posts.length} posts`);
     totalScraped = posts.length;
 
