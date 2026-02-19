@@ -1452,7 +1452,10 @@ function SettingsView() {
     setRunning(r => ({ ...r, [type]: true }));
     setRunResult(r => ({ ...r, [type]: null }));
     try {
-      const res = await fetch(endpoints[type], { method: "POST" });
+      const res = await fetch(endpoints[type], {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ""}` },
+      });
       const data = await res.json();
       setRunResult(r => ({ ...r, [type]: res.ok ? "success" : "error" }));
       setTimeout(() => setRunResult(r => ({ ...r, [type]: null })), 4000);
