@@ -1444,17 +1444,18 @@ function SettingsView() {
   };
 
   const handleRunPipeline = async (type) => {
-    const endpoints = {
-      "Content scrape": "/api/scrape/content",
-      "Comment scrape": "/api/scrape/comments",
-      "Post history sync": "/api/scrape/content", // reuse content endpoint for now
+    const pipelineType = {
+      "Content scrape": "content",
+      "Comment scrape": "comments",
+      "Post history sync": "content",
     };
     setRunning(r => ({ ...r, [type]: true }));
     setRunResult(r => ({ ...r, [type]: null }));
     try {
-      const res = await fetch(endpoints[type], {
+      const res = await fetch("/api/run-pipeline", {
         method: "POST",
-        headers: { "Authorization": `Bearer ${process.env.NEXT_PUBLIC_CRON_SECRET || ""}` },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: pipelineType[type] }),
       });
       const data = await res.json();
       setRunResult(r => ({ ...r, [type]: res.ok ? "success" : "error" }));
