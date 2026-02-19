@@ -648,13 +648,12 @@ function mapApiComment(item) {
 function CommentsView() {
   const { comments: rawComments, loading, markDone } = useComments();
   const [copiedComment, setCopiedComment] = useState(false);
-  const [localDone, setLocalDone] = useState({});
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [doneIds, setDoneIds] = useState({});
 
   const allComments = rawComments.map(mapApiComment);
-  const active = allComments.filter(c => !localDone[c.id]);
-  const current = active[0];
-  const completed = localDone ? Object.keys(localDone).length : 0;
-  const totalCount = allComments.length + completed;
+  const current = allComments[currentIdx];
+  const doneCount = Object.keys(doneIds).length;
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
   const handleCopyAndOpen = () => {
@@ -664,19 +663,25 @@ function CommentsView() {
       setTimeout(() => {
         window.open(current.postUrl, "_blank");
         setCopiedComment(false);
-        setLocalDone(d => ({ ...d, [current.id]: true }));
-        markDone(current.id).catch(err => console.error('markDone failed:', err));
-      }, 800);
+      }, 600);
     }).catch(() => {
       window.open(current.postUrl, "_blank");
-      setLocalDone(d => ({ ...d, [current.id]: true }));
-      markDone(current.id).catch(err => console.error('markDone failed:', err));
     });
   };
 
-  const handleSkip = (id) => {
-    setLocalDone(d => ({ ...d, [id]: true }));
-    markDone(id).catch(err => console.error('markDone failed:', err));
+  const handleDone = () => {
+    if (!current) return;
+    setDoneIds(d => ({ ...d, [current.id]: true }));
+    markDone(current.id).catch(err => console.error('markDone failed:', err));
+    if (currentIdx < allComments.length - 1) setCurrentIdx(i => i + 1);
+  };
+
+  const handleNext = () => {
+    if (currentIdx < allComments.length - 1) setCurrentIdx(i => i + 1);
+  };
+
+  const handleBack = () => {
+    if (currentIdx > 0) setCurrentIdx(i => i - 1);
   };
 
   if (loading) return (
@@ -689,30 +694,30 @@ function CommentsView() {
     </div>
   );
 
-  if (!current) return (
+  if (allComments.length === 0) return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle>Comments</SectionTitle>
       <div style={{ padding: "60px 0" }}>
-        <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>
-          {totalCount === 0 ? "No comment opportunities yet" : "Sprint complete."}
-        </p>
-        <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
-          {totalCount === 0 ? "Run the comment pipeline to find posts worth engaging with." : `${completed} comments this session.`}
-        </p>
+        <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>No comment opportunities yet</p>
+        <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>Run the comment pipeline to find posts worth engaging with.</p>
       </div>
     </div>
   );
 
+  if (!current) return null;
+
+  const isDone = doneIds[current.id];
+
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
-        <SectionTitle sub={`${active.length} remaining · ${completed} done`}>Comments</SectionTitle>
+        <SectionTitle sub={`${currentIdx + 1} of ${allComments.length} · ${doneCount} done`}>Comments</SectionTitle>
         <div style={{ width: 120, marginBottom: 42 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>{completed}/{totalCount}</span>
+            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>{currentIdx + 1}/{allComments.length}</span>
           </div>
           <div style={{ height: 2, background: C.stroke, borderRadius: 1, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${totalCount > 0 ? (completed / totalCount) * 100 : 0}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
+            <div style={{ height: "100%", width: `${((currentIdx + 1) / allComments.length) * 100}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
           </div>
         </div>
       </div>
@@ -724,6 +729,7 @@ function CommentsView() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{current.author}</span>
               {current.snLead && <Tag color={C.green} bg={C.greenSoft}>SN Lead</Tag>}
+              {isDone && <Tag color={C.green} bg={C.greenSoft}>Done</Tag>}
             </div>
             <span style={{ fontSize: 12, color: C.textFaint }}>{[current.title, current.company].filter(Boolean).join(" · ")}</span>
           </div>
@@ -745,25 +751,30 @@ function CommentsView() {
           <div style={{ fontSize: 14, color: C.text, lineHeight: 1.75, padding: "18px 20px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.1)`, marginBottom: 20 }}>
             {current.comment}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Btn primary onClick={handleCopyAndOpen}>
               {copiedComment ? <><Icons.check /> Copied — opening LinkedIn</> : <><Icons.external /> Copy &amp; Open on LinkedIn</>}
             </Btn>
-            <Btn ghost onClick={() => handleSkip(current.id)}>Next</Btn>
+            {!isDone && <Btn color={C.green} onClick={handleDone}><Icons.check /> Done</Btn>}
+            <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+              <Btn ghost onClick={handleBack} style={{ opacity: currentIdx === 0 ? 0.3 : 1, pointerEvents: currentIdx === 0 ? "none" : "auto" }}>← Back</Btn>
+              <Btn ghost onClick={handleNext} style={{ opacity: currentIdx >= allComments.length - 1 ? 0.3 : 1, pointerEvents: currentIdx >= allComments.length - 1 ? "none" : "auto" }}>Next →</Btn>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Queue */}
-      {active.length > 1 && (
+      {currentIdx < allComments.length - 1 && (
         <div style={{ marginTop: 40 }}>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Queue</p>
-          {active.slice(1, 4).map(c => (
+          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Up next</p>
+          {allComments.slice(currentIdx + 1, currentIdx + 4).map(c => (
             <div key={c.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 13, color: C.textSoft, fontWeight: 500 }}>{c.author}</span>
                 <span style={{ fontSize: 11, color: C.textGhost }}>· {c.title}</span>
                 {c.snLead && <Tag color={C.green} bg={C.greenSoft}>SN</Tag>}
+                {doneIds[c.id] && <Tag color={C.green} bg={C.greenSoft}>Done</Tag>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{c.engagement.likes}</span>
