@@ -634,7 +634,7 @@ function mapApiComment(item) {
     title: item.creator_title || "",
     company: item.creator_company || "",
     post: item.post_text || "",
-    postUrl: item.url && item.url.length > 5 ? item.url : (item.external_id ? `https://www.linkedin.com/feed/update/urn:li:activity:${item.external_id}` : "#"),
+    postUrl: item.url && item.url.startsWith('http') ? item.url : "#",
     engagement: {
       likes: item.likes || 0,
       comments: item.comments || 0,
