@@ -84,10 +84,7 @@ export default async function handler(req, res) {
           linkedin_url: postUrl,
           posted_at: postedAt,
           likes: num(item.engagement?.likes, item.numLikes, item.likes, 0),
-          comments_count: num(item.engagement?.comments, item.numComments, item.comments, 0),
-          shares: num(item.engagement?.shares, item.numShares, item.shares, 0),
-          source: 'auto_sync',
-          updated_at: new Date().toISOString(),
+          comments: num(item.engagement?.comments, item.numComments, item.comments, 0),
         }, {
           onConflict: 'linkedin_url',
           ignoreDuplicates: false, // Update engagement numbers on existing posts
