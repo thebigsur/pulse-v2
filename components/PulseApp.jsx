@@ -232,7 +232,7 @@ function mapApiDraft(item) {
       text: item.suggested_angle || item.post_text || "",
       author: item.creator_handle ? `@${item.creator_handle}` : (item.creator_name || "Unknown"),
       engagement: engagement || "New post",
-      url: item.url || null,
+      url: (item.url && item.url.startsWith('http') ? item.url : null) || (item.draft_source_urls && item.draft_source_urls.startsWith('http') ? item.draft_source_urls : null),
     },
     topic: (item.draft_topic_tags && item.draft_topic_tags[0]) || "General",
     imageHint: item.draft_image_hint || null,
