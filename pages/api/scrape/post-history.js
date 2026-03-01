@@ -25,7 +25,7 @@ export default async function handler(req, res) {
   try {
     // Get advisor profile
     const { data: profile } = await db.from('advisor_profile').select('*').single();
-    const advisorName = (profile?.name || '').trim();
+    const advisorName = (profile?.full_name || '').trim();
 
     if (!advisorName) {
       await db.from('scrape_log').update({
