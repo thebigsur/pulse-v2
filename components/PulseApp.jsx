@@ -219,6 +219,9 @@ const Icons = {
 // DATA MAPPER — API → UI shape
 // ═══════════════════════════════════════════
 
+// Updated mapApiDraft — add topicTags and hookType for save-to-history flow
+// Replace lines 222-241 in PulseApp.jsx
+
 function mapApiDraft(item) {
   const engagement = [
     item.likes ? `${item.likes.toLocaleString()} likes` : null,
@@ -235,6 +238,8 @@ function mapApiDraft(item) {
       url: (item.url && item.url.startsWith('http') ? item.url : null) || (item.draft_source_urls && item.draft_source_urls.startsWith('http') ? item.draft_source_urls : null),
     },
     topic: (item.draft_topic_tags && item.draft_topic_tags[0]) || "General",
+    topicTags: item.draft_topic_tags || [],
+    hookType: item.draft_hook_type || null,
     imageHint: item.draft_image_hint || null,
     hashtags: (item.draft_hashtags && item.draft_hashtags.length > 0) ? item.draft_hashtags : null,
   };
