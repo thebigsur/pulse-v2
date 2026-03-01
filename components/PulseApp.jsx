@@ -246,7 +246,7 @@ function mapApiDraft(item) {
 }
 
 // ═══════════════════════════════════════════
-// POSTS — All visible, scrollable, Approve + New Draft
+// POSTS — One draft at a time, Approve + Skip
 // ═══════════════════════════════════════════
 
 function PostsView() {
@@ -254,9 +254,11 @@ function PostsView() {
   const { data: perfData } = usePerformance();
   const [showSource, setShowSource] = useState({});
   const [showHistory, setShowHistory] = useState(false);
-  const [replacing, setReplacing] = useState({});
   const [copied, setCopied] = useState({});
   const [expandedApproved, setExpandedApproved] = useState({});
+
+  // Save-to-history state
+  const [savePanel, setSavePanel] = useState({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false });
 
   const postHistory = (perfData.posts || []).map(p => ({
     id: p.id,
@@ -270,22 +272,54 @@ function PostsView() {
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
   // Map API data to UI shape and split by status
-  const allDrafts = rawDrafts.map(mapApiDraft);
   const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft);
   const approvedDrafts = rawDrafts.filter(d => d.draft_status === 'approved').map(mapApiDraft);
 
-  const handleApprove = async (id) => {
-    try { await apiApprove(id); } catch (err) { console.error('Approve failed:', err); }
+  // Current draft = first active one (one at a time)
+  const currentDraft = activeDrafts[0] || null;
+  const remainingCount = activeDrafts.length;
+
+  const handleApprove = async (draft) => {
+    try {
+      await apiApprove(draft.id);
+      // Open save panel pre-filled with the approved draft
+      setSavePanel({
+        open: true,
+        text: draft.text,
+        topicTags: draft.topicTags || [],
+        hookType: draft.hookType || null,
+        saving: false,
+        saved: false,
+      });
+      // Also copy to clipboard
+      navigator.clipboard.writeText(draft.text).catch(() => {});
+    } catch (err) {
+      console.error('Approve failed:', err);
+    }
   };
 
-  const handleNewDraft = async (id) => {
-    setReplacing(r => ({ ...r, [id]: true }));
+  const handleSkip = async (id) => {
+    try { await apiSkip(id); } catch (err) { console.error('Skip failed:', err); }
+  };
+
+  const handleSaveToHistory = async () => {
+    if (!savePanel.text.trim()) return;
+    setSavePanel(s => ({ ...s, saving: true }));
     try {
-      await apiSkip(id);
+      await fetch('/api/post-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          post_text: savePanel.text.trim(),
+          topic_tags: savePanel.topicTags,
+          hook_type: savePanel.hookType,
+        }),
+      });
+      setSavePanel(s => ({ ...s, saving: false, saved: true }));
+      setTimeout(() => setSavePanel({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false }), 1500);
     } catch (err) {
-      console.error('Skip failed:', err);
-    } finally {
-      setTimeout(() => setReplacing(r => ({ ...r, [id]: false })), 300);
+      console.error('Save to history failed:', err);
+      setSavePanel(s => ({ ...s, saving: false }));
     }
   };
 
@@ -296,19 +330,15 @@ function PostsView() {
     }).catch(() => {});
   };
 
-  const [pasteText, setPasteText] = useState("");
+  // Manual paste (not from an approved draft)
   const [showPaste, setShowPaste] = useState(false);
-  const [pasteSaved, setPasteSaved] = useState(false);
-
-  const handleSavePaste = () => {
-    if (!pasteText.trim()) return;
-    setPasteSaved(true);
-    setTimeout(() => { setPasteSaved(false); setShowPaste(false); setPasteText(""); }, 2000);
+  const openManualPaste = () => {
+    setSavePanel({ open: true, text: "", topicTags: [], hookType: null, saving: false, saved: false });
   };
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} drafts this week · ${approvedDrafts.length} approved`}>
+      <SectionTitle sub={loading ? "Loading drafts..." : `${remainingCount} remaining · ${approvedDrafts.length} approved`}>
         Posts
       </SectionTitle>
 
@@ -319,95 +349,89 @@ function PostsView() {
         </div>
       )}
 
-      {!loading && activeDrafts.length === 0 && approvedDrafts.length === 0 && (
+      {!loading && !currentDraft && approvedDrafts.length === 0 && !savePanel.open && (
         <div style={{ padding: "60px 0", textAlign: "center" }}>
           <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No drafts yet</p>
           <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Run the content pipeline to generate drafts from trending content.</p>
         </div>
       )}
 
-      {/* Last post performance callout */}
-      {!loading && activeDrafts.length + approvedDrafts.length > 0 && <><div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "14px 18px", borderRadius: 8, marginBottom: 24,
-        background: C.greenSoft, border: `1px solid rgba(109,175,123,0.15)`,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}50` }} />
-          <span style={{ fontSize: 13, color: C.green, fontWeight: 500 }}>Your RSU post outperformed your average by 3.2×</span>
-          <span style={{ fontSize: 12, color: C.textFaint }}>— 847 likes, 156 comments</span>
-        </div>
-        <a href="https://linkedin.com/feed/update/urn:li:activity:7296001" target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }}>
-          <Icons.external />
-        </a>
-      </div>
+      {!loading && (currentDraft || approvedDrafts.length > 0) && <>
 
-      {/* Paste your latest post */}
-      {!showPaste ? (
-        <button onClick={() => setShowPaste(true)} style={{
-          width: "100%", padding: "16px 18px", borderRadius: 8,
-          background: "transparent", border: `1px dashed ${C.stroke}`,
-          color: C.textGhost, fontSize: 13, fontFamily: F.sans,
-          cursor: "pointer", textAlign: "left", marginBottom: 32,
-          transition: "all 0.15s",
-        }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = C.strokeHover; e.currentTarget.style.color = C.textFaint; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = C.stroke; e.currentTarget.style.color = C.textGhost; }}
-        >
-          + Paste your latest LinkedIn post to update history
-        </button>
-      ) : (
-        <div style={{
-          marginBottom: 32, padding: "18px 20px", borderRadius: 8,
-          background: C.elevated, border: `1px solid ${C.stroke}`,
-          animation: "fadeIn 0.2s ease",
-        }}>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
-            Paste your latest post
-          </p>
-          <textarea
-            value={pasteText}
-            onChange={e => setPasteText(e.target.value)}
-            placeholder="Paste the full text of your LinkedIn post here..."
-            rows={5}
-            style={{
-              width: "100%", background: "transparent", border: "none",
-              borderBottom: `1px solid ${C.stroke}`, color: C.text,
-              fontSize: 14, fontFamily: F.sans, padding: "10px 0",
-              lineHeight: 1.65, resize: "vertical",
-            }}
-            onFocus={e => e.target.style.borderBottomColor = C.gold}
-            onBlur={e => e.target.style.borderBottomColor = C.stroke}
-          />
-          <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
-            <Btn primary onClick={handleSavePaste}>
-              {pasteSaved ? <><Icons.check /> Saved to History</> : "Save to History"}
-            </Btn>
-            <Btn ghost onClick={() => { setShowPaste(false); setPasteText(""); }}>Cancel</Btn>
-            {pasteText.trim() && (
-              <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginLeft: 8 }}>
-                {wordCount(pasteText)}w
-              </span>
-            )}
+        {/* Save-to-history panel — appears after Approve or manual paste */}
+        {savePanel.open && (
+          <div style={{
+            marginBottom: 32, padding: "20px 24px", borderRadius: 8,
+            background: C.elevated, border: `1px solid ${C.green}40`,
+            animation: "fadeIn 0.2s ease",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <p style={{ fontSize: 10, fontFamily: F.mono, color: C.green, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                Save to post history
+              </p>
+              <p style={{ fontSize: 11, color: C.textGhost }}>
+                Edit below to match what you posted on LinkedIn
+              </p>
+            </div>
+            <textarea
+              value={savePanel.text}
+              onChange={e => setSavePanel(s => ({ ...s, text: e.target.value }))}
+              placeholder="Paste the full text of your LinkedIn post here..."
+              rows={8}
+              style={{
+                width: "100%", background: "transparent", border: "none",
+                borderBottom: `1px solid ${C.stroke}`, color: C.text,
+                fontSize: 14, fontFamily: F.sans, padding: "10px 0",
+                lineHeight: 1.65, resize: "vertical",
+              }}
+              onFocus={e => e.target.style.borderBottomColor = C.gold}
+              onBlur={e => e.target.style.borderBottomColor = C.stroke}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
+              <Btn primary onClick={handleSaveToHistory}>
+                {savePanel.saved ? <><Icons.check /> Saved</> : savePanel.saving ? "Saving..." : "Save to History"}
+              </Btn>
+              <Btn ghost onClick={() => setSavePanel({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false })}>
+                Skip
+              </Btn>
+              {savePanel.text.trim() && (
+                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginLeft: 8 }}>
+                  {wordCount(savePanel.text)}w
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* All drafts — visible, scrollable */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-        {activeDrafts.map((draft, idx) => {
+        {/* Paste shortcut — only show when save panel is NOT open */}
+        {!savePanel.open && (
+          <button onClick={openManualPaste} style={{
+            width: "100%", padding: "16px 18px", borderRadius: 8,
+            background: "transparent", border: `1px dashed ${C.stroke}`,
+            color: C.textGhost, fontSize: 13, fontFamily: F.sans,
+            cursor: "pointer", textAlign: "left", marginBottom: 32,
+            transition: "all 0.15s",
+          }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.strokeHover; e.currentTarget.style.color = C.textFaint; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.stroke; e.currentTarget.style.color = C.textGhost; }}
+          >
+            + Paste your latest LinkedIn post to update history
+          </button>
+        )}
+
+        {/* ─── Current Draft (one at a time) ─── */}
+        {currentDraft && !savePanel.open && (() => {
+          const draft = currentDraft;
           const tc = getTopicColor(draft.topic);
-          const isReplacing = replacing[draft.id];
 
           return (
             <div key={draft.id} style={{
-              animation: `slideUp 0.3s ease ${idx * 0.06}s both`,
-              opacity: isReplacing ? 0.3 : 1,
-              transition: "opacity 0.3s ease",
+              animation: "slideUp 0.3s ease both",
               borderLeft: `2px solid ${tc.fg}`,
               paddingLeft: 24,
+              marginBottom: 32,
             }}>
-              {/* Topic tag + word count — colored by topic */}
+              {/* Topic tag + word count + remaining counter */}
               <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
                 <Tag color={tc.fg} bg={tc.bg}>{draft.topic}</Tag>
                 <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{wordCount(draft.text)}w</span>
@@ -421,6 +445,9 @@ function PostsView() {
                     {draft.hashtags.join(" ")}
                   </span>
                 )}
+                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginLeft: "auto" }}>
+                  {remainingCount} remaining
+                </span>
               </div>
 
               {/* Draft text */}
@@ -444,7 +471,7 @@ function PostsView() {
                 </div>
               )}
 
-              {/* Source — collapsible, with link to original */}
+              {/* Source — collapsible */}
               <button onClick={() => setShowSource(s => ({ ...s, [draft.id]: !s[draft.id] }))}
                 style={{
                   background: "none", border: "none", cursor: "pointer",
@@ -480,100 +507,108 @@ function PostsView() {
                 </div>
               )}
 
-              {/* Actions: Approve + New Draft */}
+              {/* Actions: Approve + Skip */}
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn primary onClick={() => handleApprove(draft.id)}>
+                <Btn primary onClick={() => handleApprove(draft)}>
                   <Icons.check /> Approve
                 </Btn>
-                <Btn onClick={() => handleNewDraft(draft.id)}>
-                  <Icons.refresh /> New Draft
+                <Btn onClick={() => handleSkip(draft.id)}>
+                  Skip
                 </Btn>
               </div>
             </div>
           );
-        })}
-      </div>
+        })()}
 
-      {activeDrafts.length === 0 && (
-        <div style={{ padding: "50px 0", animation: "fadeIn 0.3s ease" }}>
-          <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All drafts reviewed.</p>
-          <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>{approvedDrafts.length} ready to post.</p>
-        </div>
-      )}
-
-      {/* Approved */}
-      {approvedDrafts.length > 0 && (
-        <div style={{ marginTop: 48 }}>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Approved · {approvedDrafts.length} ready</p>
-          {approvedDrafts.map(d => {
-            const tc = getTopicColor(d.topic);
-            const isExpanded = expandedApproved[d.id];
-            return (
-              <div key={d.id} style={{ borderBottom: `1px solid ${C.stroke}` }}>
-                <div
-                  onClick={() => setExpandedApproved(e => ({ ...e, [d.id]: !e[d.id] }))}
-                  style={{
-                    padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center",
-                    cursor: "pointer", transition: "background 0.15s", borderRadius: 4,
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}40` }} />
-                    <span style={{ fontSize: 14, color: C.textSoft }}>{d.text.split("\n")[0]}</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <Tag color={tc.fg} bg={tc.bg}>{d.topic}</Tag>
-                    <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}><Icons.chevRight /></span>
-                  </div>
-                </div>
-                {isExpanded && (
-                  <div style={{ padding: "0 0 20px 18px", animation: "fadeIn 0.2s ease" }}>
-                    <div style={{ fontSize: 14, color: C.text, lineHeight: 1.75, whiteSpace: "pre-wrap", marginBottom: 14, maxWidth: 560, borderLeft: `2px solid ${C.green}`, paddingLeft: 16 }}>
-                      {d.text}
-                    </div>
-                    <Btn onClick={() => handleCopy(d)}>
-                      {copied[d.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy to Clipboard</>}
-                    </Btn>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Post History */}
-      <div style={{ marginTop: 48 }}>
-        <button onClick={() => setShowHistory(!showHistory)}
-          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: C.textGhost, fontSize: 12, fontFamily: F.sans, padding: 0 }}
-          onMouseEnter={e => e.currentTarget.style.color = C.textFaint}
-          onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
-        >
-          <span style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}><Icons.chevRight /></span>
-          Post History
-          <span style={{ fontFamily: F.mono, fontSize: 11 }}>{postHistory.length}</span>
-        </button>
-        {showHistory && (
-          <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease" }}>
-            {postHistory.map(p => (
-              <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
-                <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px" }}
-                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <span style={{ fontSize: 13, color: C.textSoft, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 16 }}>{p.text}</span>
-                  <div style={{ display: "flex", gap: 14, flexShrink: 0, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.date}</span>
-                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{p.likes} · {p.comments}</span>
-                    <span style={{ color: C.textGhost, display: "flex" }}><Icons.external /></span>
-                  </div>
-                </div>
-              </a>
-            ))}
+        {/* All caught up state */}
+        {!currentDraft && !savePanel.open && (
+          <div style={{ padding: "50px 0", animation: "fadeIn 0.3s ease" }}>
+            <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All caught up.</p>
+            <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
+              {approvedDrafts.length > 0
+                ? `${approvedDrafts.length} post${approvedDrafts.length > 1 ? 's' : ''} ready. Next drafts arrive tomorrow at 6am.`
+                : "Next drafts arrive tomorrow at 6am."
+              }
+            </p>
           </div>
         )}
-      </div>
+
+        {/* Approved queue */}
+        {approvedDrafts.length > 0 && (
+          <div style={{ marginTop: 48 }}>
+            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Approved · {approvedDrafts.length} ready</p>
+            {approvedDrafts.map(d => {
+              const tc = getTopicColor(d.topic);
+              const isExpanded = expandedApproved[d.id];
+              return (
+                <div key={d.id} style={{ borderBottom: `1px solid ${C.stroke}` }}>
+                  <div
+                    onClick={() => setExpandedApproved(e => ({ ...e, [d.id]: !e[d.id] }))}
+                    style={{
+                      padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center",
+                      cursor: "pointer", transition: "background 0.15s", borderRadius: 4,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}40` }} />
+                      <span style={{ fontSize: 14, color: C.textSoft }}>{d.text.split("\n")[0]}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <Tag color={tc.fg} bg={tc.bg}>{d.topic}</Tag>
+                      <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}><Icons.chevRight /></span>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div style={{ padding: "0 0 20px 18px", animation: "fadeIn 0.2s ease" }}>
+                      <div style={{ fontSize: 14, color: C.text, lineHeight: 1.75, whiteSpace: "pre-wrap", marginBottom: 14, maxWidth: 560, borderLeft: `2px solid ${C.green}`, paddingLeft: 16 }}>
+                        {d.text}
+                      </div>
+                      <Btn onClick={() => handleCopy(d)}>
+                        {copied[d.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy to Clipboard</>}
+                      </Btn>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Post History */}
+        <div style={{ marginTop: 48 }}>
+          <button onClick={() => setShowHistory(!showHistory)}
+            style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: C.textGhost, fontSize: 12, fontFamily: F.sans, padding: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = C.textFaint}
+            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
+          >
+            <span style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}><Icons.chevRight /></span>
+            Post History
+            <span style={{ fontFamily: F.mono, fontSize: 11 }}>{postHistory.length}</span>
+          </button>
+          {showHistory && (
+            <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease" }}>
+              {postHistory.length === 0 && (
+                <p style={{ fontSize: 13, color: C.textGhost, padding: "12px 0" }}>No posts saved yet. Approve a draft and save it to start building history.</p>
+              )}
+              {postHistory.map(p => (
+                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+                  <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px" }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <span style={{ fontSize: 13, color: C.textSoft, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 16 }}>{p.text}</span>
+                    <div style={{ display: "flex", gap: 14, flexShrink: 0, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.date}</span>
+                      <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{p.likes} · {p.comments}</span>
+                      <span style={{ color: C.textGhost, display: "flex" }}><Icons.external /></span>
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
       </>}
     </div>
   );
