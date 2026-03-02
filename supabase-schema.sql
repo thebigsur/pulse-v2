@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS advisor_profile (
   title TEXT DEFAULT '',
   specialization TEXT DEFAULT '',
   tagline TEXT DEFAULT '',
+  linkedin_profile_url TEXT DEFAULT '',
   -- ICP fields
   icp_age_min INTEGER DEFAULT 25,
   icp_age_max INTEGER DEFAULT 45,
