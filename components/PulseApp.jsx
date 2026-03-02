@@ -916,9 +916,32 @@ function PerformanceView() {
   const [editingImp, setEditingImp] = useState(null); // post id being edited
   const [impValue, setImpValue] = useState("");
   const [savingImp, setSavingImp] = useState(false);
+  const [editingCat, setEditingCat] = useState(null); // post id with open category dropdown
 
   const allPosts = perfData.posts || [];
   const commentCount = perfData.commentCount || 0;
+  const userCategories = perfData.categories || [];
+  const allCategories = [...userCategories, ...(userCategories.includes("General") ? [] : ["General"])];
+
+  const handleCategoryChange = async (postId, newCategory) => {
+    setEditingCat(null);
+    try {
+      await fetch("/api/performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: postId, topic_tags: [newCategory] }),
+      });
+      refetch();
+    } catch (err) { console.error("Save category failed:", err); }
+  };
+
+  // Close category dropdown on outside click
+  useEffect(() => {
+    if (!editingCat) return;
+    const handler = () => setEditingCat(null);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [editingCat]);
 
   // Filter posts by selected time period (rolling windows)
   const now = new Date();
@@ -1129,7 +1152,44 @@ function PerformanceView() {
                     <p style={{ fontSize: 14, color: C.text, lineHeight: 1.5, marginBottom: 6 }}>{(p.post_text || "").substring(0, 80)}...</p>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                       <span style={{ fontSize: 11, color: C.textGhost }}>{date}</span>
-                      <Tag color={tc.fg} bg={tc.bg}>{tag}</Tag>
+                      <div style={{ position: "relative" }}>
+                        <div onClick={(e) => { e.stopPropagation(); setEditingCat(editingCat === p.id ? null : p.id); }}
+                          style={{ cursor: "pointer", display: "inline-flex" }}
+                          title="Click to change category">
+                          <Tag color={tc.fg} bg={tc.bg}>{tag}</Tag>
+                        </div>
+                        {editingCat === p.id && (
+                          <div style={{
+                            position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50,
+                            background: C.elevated, border: `1px solid ${C.stroke}`, borderRadius: 6,
+                            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, maxHeight: 240, overflowY: "auto",
+                            padding: "4px 0",
+                          }}>
+                            {allCategories.map((cat) => {
+                              const catColor = getTopicColor(cat);
+                              const isActive = cat === tag;
+                              return (
+                                <button key={cat} onClick={(e) => { e.stopPropagation(); handleCategoryChange(p.id, cat); }}
+                                  style={{
+                                    display: "flex", alignItems: "center", gap: 8, width: "100%",
+                                    padding: "8px 12px", border: "none", cursor: "pointer",
+                                    background: isActive ? C.surfaceHover : "transparent",
+                                    color: isActive ? C.text : C.textFaint,
+                                    fontSize: 12, fontFamily: F.mono, textAlign: "left",
+                                    transition: "background 0.1s",
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                                >
+                                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: catColor.fg, flexShrink: 0 }} />
+                                  {cat}
+                                  {isActive && <span style={{ marginLeft: "auto", fontSize: 10, color: C.gold }}>✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                       {p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }}><Icons.external /></a>}
                     </div>
                   </div>
