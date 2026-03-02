@@ -69,7 +69,7 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS advisor_posts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   post_text TEXT NOT NULL,
-  linkedin_url TEXT,
+  linkedin_url TEXT UNIQUE,
   likes INTEGER DEFAULT 0,
   comments INTEGER DEFAULT 0,
   impressions INTEGER DEFAULT 0,
