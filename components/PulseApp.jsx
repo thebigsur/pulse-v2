@@ -46,16 +46,16 @@ const C = {
 
 // Topic → color mapping: dynamic palette for user-defined categories
 const CATEGORY_PALETTE = [
-  { fg: "#D4806A", bg: "rgba(212,128,106,0.12)" },   // coral
-  { fg: "#6A9FD8", bg: "rgba(106,159,216,0.12)" },   // blue
-  { fg: "#6DAF7B", bg: "rgba(109,175,123,0.12)" },   // green
-  { fg: "#9B84C9", bg: "rgba(155,132,201,0.12)" },   // purple
-  { fg: "#C8A96E", bg: "rgba(200,169,110,0.12)" },   // gold
-  { fg: "#D4A06A", bg: "rgba(212,160,106,0.12)" },   // amber
-  { fg: "#6AC4D4", bg: "rgba(106,196,212,0.12)" },   // teal
-  { fg: "#D46A9F", bg: "rgba(212,106,159,0.12)" },   // rose
-  { fg: "#84C99B", bg: "rgba(132,201,155,0.12)" },   // mint
-  { fg: "#C99B84", bg: "rgba(201,155,132,0.12)" },   // tan
+  { fg: "#E06050", bg: "rgba(224,96,80,0.12)" },     // red-coral
+  { fg: "#4EA8DE", bg: "rgba(78,168,222,0.12)" },     // sky blue
+  { fg: "#5BBD72", bg: "rgba(91,189,114,0.12)" },     // green
+  { fg: "#C77DFF", bg: "rgba(199,125,255,0.12)" },    // violet
+  { fg: "#E8A838", bg: "rgba(232,168,56,0.12)" },     // amber
+  { fg: "#F472B6", bg: "rgba(244,114,182,0.12)" },    // pink
+  { fg: "#38BDF8", bg: "rgba(56,189,248,0.12)" },     // cyan
+  { fg: "#A3E635", bg: "rgba(163,230,53,0.12)" },     // lime
+  { fg: "#FB923C", bg: "rgba(251,146,60,0.12)" },     // orange
+  { fg: "#67E8F9", bg: "rgba(103,232,249,0.12)" },    // teal
 ];
 
 // Cache to keep colors stable per category name
@@ -942,33 +942,39 @@ function PerformanceView() {
 
   const postLimit = (period === "all_time" || period === "yearly") ? 20 : 10;
 
-  // Engagement grade calculator
-  const getEngagementRate = (p) => {
+  // Engagement performance score: impressions weighted most, then comments, then likes
+  // Score = (impressions × 3) + (comments × 50) + (likes × 10)
+  // Grade is relative to the user's own average performance
+  const getPostScore = (p) => {
     if (!p.impressions || p.impressions <= 0) return null;
-    return ((((p.comments || 0) * 3) + (p.likes || 0)) / p.impressions) * 100;
+    return (p.impressions * 3) + ((p.comments || 0) * 50) + ((p.likes || 0) * 10);
   };
 
-  const getGrade = (rate) => {
-    if (rate === null) return { letter: "—", color: C.textGhost };
-    if (rate >= 5) return { letter: "A+", color: "#4ade80" };
-    if (rate >= 3) return { letter: "A", color: "#86efac" };
-    if (rate >= 2) return { letter: "B", color: C.gold };
-    if (rate >= 1) return { letter: "C", color: "#fbbf24" };
+  // Calculate average score across all posts with impressions for grading baseline
+  const scoredPosts = filteredPosts.filter(p => (p.impressions || 0) > 0);
+  const avgScore = scoredPosts.length > 0
+    ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
+    : 0;
+
+  const getGrade = (score) => {
+    if (score === null || avgScore === 0) return { letter: "—", color: C.textGhost };
+    const ratio = score / avgScore;
+    if (ratio >= 2.0) return { letter: "A+", color: "#4ade80" };
+    if (ratio >= 1.4) return { letter: "A", color: "#86efac" };
+    if (ratio >= 0.8) return { letter: "B", color: C.gold };
+    if (ratio >= 0.4) return { letter: "C", color: "#fbbf24" };
     return { letter: "D", color: "#f87171" };
   };
 
-  // Compute metrics from filtered posts
+  // Aggregate: average score across posts with impressions, graded against itself
+  const totalScore = scoredPosts.length > 0
+    ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
+    : null;
+  const avgGrade = totalScore !== null ? getGrade(totalScore) : { letter: "—", color: C.textGhost };
+  const avgEngDisplay = totalScore !== null ? Math.round(totalScore).toLocaleString() : "—";
   const totalLikes = filteredPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
   const totalComments = filteredPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
   const totalImpressions = filteredPosts.reduce((sum, p) => sum + (p.impressions || 0), 0);
-
-  // Avg engagement rate (only from posts with impressions)
-  const postsWithImp = filteredPosts.filter(p => (p.impressions || 0) > 0);
-  const avgEngRate = postsWithImp.length > 0
-    ? postsWithImp.reduce((sum, p) => sum + getEngagementRate(p), 0) / postsWithImp.length
-    : null;
-  const avgGrade = getGrade(avgEngRate);
-  const avgEngDisplay = avgEngRate !== null ? `${avgEngRate.toFixed(1)}%` : "—";
 
   // Find top category per metric
   const catMetrics = {};
@@ -996,7 +1002,7 @@ function PerformanceView() {
     { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: impColor },
     { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: likesColor },
     { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: commentsColor },
-    { label: "Engagement", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color },
+    { label: "Perf. score", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color },
   ];
 
   // Comment impact from real data
@@ -1102,7 +1108,7 @@ function PerformanceView() {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
-            const engRate = getEngagementRate(p);
+            const engRate = getPostScore(p);
             const grade = getGrade(engRate);
 
             return (
