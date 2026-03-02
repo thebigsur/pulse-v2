@@ -930,17 +930,39 @@ function PerformanceView() {
 
   const postLimit = (period === "all_time" || period === "yearly") ? 20 : 10;
 
+  // Engagement grade calculator
+  const getEngagementRate = (p) => {
+    if (!p.impressions || p.impressions <= 0) return null;
+    return ((((p.comments || 0) * 3) + (p.likes || 0)) / p.impressions) * 100;
+  };
+
+  const getGrade = (rate) => {
+    if (rate === null) return { letter: "—", color: C.textGhost };
+    if (rate >= 5) return { letter: "A+", color: "#4ade80" };
+    if (rate >= 3) return { letter: "A", color: "#86efac" };
+    if (rate >= 2) return { letter: "B", color: C.gold };
+    if (rate >= 1) return { letter: "C", color: "#fbbf24" };
+    return { letter: "D", color: "#f87171" };
+  };
+
   // Compute metrics from filtered posts
   const totalLikes = filteredPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
   const totalComments = filteredPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
   const totalImpressions = filteredPosts.reduce((sum, p) => sum + (p.impressions || 0), 0);
-  const avgEngagement = filteredPosts.length > 0 ? Math.round((totalLikes + totalComments) / filteredPosts.length) : 0;
+
+  // Avg engagement rate (only from posts with impressions)
+  const postsWithImp = filteredPosts.filter(p => (p.impressions || 0) > 0);
+  const avgEngRate = postsWithImp.length > 0
+    ? postsWithImp.reduce((sum, p) => sum + getEngagementRate(p), 0) / postsWithImp.length
+    : null;
+  const avgGrade = getGrade(avgEngRate);
+  const avgEngDisplay = avgEngRate !== null ? `${avgEngRate.toFixed(1)}%` : "—";
 
   const stats = [
     { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: C.gold },
     { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: C.purple },
     { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: C.green },
-    { label: "Avg engagement", value: avgEngagement > 0 ? avgEngagement.toLocaleString() : "—", color: C.blue },
+    { label: "Engagement", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color },
   ];
 
   // Comment impact from real data
@@ -1017,9 +1039,9 @@ function PerformanceView() {
         {stats.map((s, i) => (
           <div key={i} style={{ background: C.elevated, padding: "24px 20px", animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
             <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>{s.label}</p>
-            <div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ fontFamily: F.serif, fontSize: 30, color: s.value === "—" ? C.textGhost : C.text, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
-              {s.delta && <span style={{ fontSize: 12, color: C.green, marginLeft: 8, fontFamily: F.mono }}>{s.delta}</span>}
+              {s.grade && s.grade.letter !== "—" && <span style={{ fontFamily: F.mono, fontSize: 16, fontWeight: 600, color: s.grade.color }}>{s.grade.letter}</span>}
             </div>
           </div>
         ))}
@@ -1046,6 +1068,8 @@ function PerformanceView() {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+            const engRate = getEngagementRate(p);
+            const grade = getGrade(engRate);
 
             return (
               <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px" }}
@@ -1061,7 +1085,10 @@ function PerformanceView() {
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-                    <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes || 0} · {p.comments || 0}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {grade.letter !== "—" && <span style={{ fontSize: 12, fontFamily: F.mono, fontWeight: 600, color: grade.color }}>{grade.letter}</span>}
+                      <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes || 0} · {p.comments || 0}</p>
+                    </div>
                     {editingImp === p.id ? (
                       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                         <input
@@ -1184,7 +1211,7 @@ function ProfileView() {
   const tabs = [
     { id: "bio", label: "Bio" }, { id: "icp", label: "ICP" },
     { id: "rules", label: "Post Rules" }, { id: "voice", label: "Voice" },
-    { id: "history", label: "Post History" }, { id: "compliance", label: "Compliance" },
+    { id: "categories", label: "Categories" }, { id: "history", label: "Post History" }, { id: "compliance", label: "Compliance" },
   ];
 
   return (
@@ -1210,6 +1237,7 @@ function ProfileView() {
             {tab === "icp" && <ICPForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "rules" && <RulesForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "voice" && <VoiceForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
+            {tab === "categories" && <PostCategoriesForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
             {tab === "history" && <HistoryForm />}
             {tab === "compliance" && <ComplianceForm profile={profile} updateField={updateField} onSave={saveProfile} saving={saving} saved={saved} />}
           </>
@@ -1252,6 +1280,106 @@ const CONTENT_PREF_OPTIONS = [
   { id: "timely", label: "Timely / news-reactive", desc: "React to market events, tax law changes, or trending financial topics. Rides existing attention." },
   { id: "vulnerable", label: "Vulnerable / personal", desc: "Share your own journey, mistakes, or behind-the-scenes. Humanizes the advisor brand." },
 ];
+
+function PostCategoriesForm({ profile, updateField, onSave, saving, saved }) {
+  const categories = (() => { try { return JSON.parse(profile.post_categories || '[]'); } catch { return []; } })();
+  const [newCat, setNewCat] = useState("");
+  const [reclassifying, setReclassifying] = useState(false);
+  const [reclassResult, setReclassResult] = useState("");
+
+  const addCategory = () => {
+    const trimmed = newCat.trim();
+    if (!trimmed || categories.includes(trimmed)) return;
+    const updated = [...categories, trimmed];
+    updateField("post_categories", JSON.stringify(updated));
+    setNewCat("");
+  };
+
+  const removeCategory = (idx) => {
+    const updated = categories.filter((_, i) => i !== idx);
+    updateField("post_categories", JSON.stringify(updated));
+  };
+
+  const reclassifyAll = async () => {
+    setReclassifying(true);
+    setReclassResult("");
+    try {
+      // First save the current categories
+      await onSave();
+      // Then re-run post history sync which will re-classify
+      const res = await fetch("/api/scrape/post-history", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${window.__CRON_SECRET || ""}` },
+      });
+      // Fallback: use the run-pipeline endpoint
+      const pipeRes = await fetch("/api/run-pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pipeline: "post-history" }),
+      });
+      const data = await pipeRes.json();
+      setReclassResult(`Done — ${data.classified || 0} posts classified`);
+    } catch (err) {
+      setReclassResult("Error: " + err.message);
+    }
+    setReclassifying(false);
+  };
+
+  return (<div style={{ animation: "fadeIn 0.2s ease" }}>
+    <Field label="Post Categories" hint="Define categories for your content. When Post History Sync runs, AI will auto-classify each post into one of these categories. This powers the 'By Topic' breakdown in Performance.">
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {categories.map((cat, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 14px", borderRadius: 6,
+            background: C.elevated, border: `1px solid ${C.stroke}`,
+          }}>
+            <span style={{ fontSize: 13, color: C.text, flex: 1 }}>{cat}</span>
+            <button onClick={() => removeCategory(i)} style={{ background: "none", border: "none", color: C.textGhost, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+          </div>
+        ))}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={newCat}
+            onChange={e => setNewCat(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addCategory()}
+            placeholder="e.g. Equity Comp, Tax Strategy, Market Commentary..."
+            style={{
+              flex: 1, padding: "10px 14px", borderRadius: 6,
+              background: C.surface, border: `1px solid ${C.stroke}`, color: C.text,
+              fontSize: 13, fontFamily: F.sans,
+            }}
+            onFocus={e => e.target.style.borderColor = C.gold}
+            onBlur={e => e.target.style.borderColor = C.stroke}
+          />
+          <Btn primary onClick={addCategory} style={{ padding: "10px 18px", fontSize: 12 }}>Add</Btn>
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 12 }}>
+        {categories.length} categories defined{categories.length > 0 ? " — posts will be auto-classified on next sync" : ""}
+      </p>
+    </Field>
+
+    <SaveButton onSave={onSave} saving={saving} saved={saved} />
+
+    {categories.length > 0 && (
+      <div style={{ marginTop: 24, padding: "16px 20px", borderRadius: 8, background: C.elevated, border: `1px solid ${C.stroke}` }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <p style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>Re-classify existing posts</p>
+            <p style={{ fontSize: 12, color: C.textFaint, marginTop: 4 }}>Run Post History Sync to apply categories to all synced posts</p>
+          </div>
+          <Btn ghost onClick={reclassifyAll} disabled={reclassifying} style={{ padding: "8px 16px", fontSize: 12 }}>
+            {reclassifying ? "Running..." : "Sync & Classify"}
+          </Btn>
+        </div>
+        {reclassResult && <p style={{ fontSize: 11, fontFamily: F.mono, color: C.gold, marginTop: 10 }}>{reclassResult}</p>}
+      </div>
+    )}
+  </div>);
+}
 
 function ContentPreferences({ profile, updateField }) {
   // Parse stored preferences from profile (comma-separated string) or default
