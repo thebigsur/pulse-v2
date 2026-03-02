@@ -10,6 +10,50 @@ export const config = {
   maxDuration: 300,
 };
 
+// Parse various date formats from Apify actors
+// Handles ISO strings, timestamps, and relative times like "2w", "3d", "1mo"
+function parsePostDate(item) {
+  // Try numeric timestamp first
+  if (item.createdAtTimestamp && typeof item.createdAtTimestamp === 'number') {
+    return new Date(item.createdAtTimestamp).toISOString();
+  }
+
+  // Try standard date fields
+  const raw = item.postedAt || item.publishedAt || item.postedDate || item.createdAt || null;
+  if (!raw) return new Date().toISOString();
+
+  // If it's already a number (epoch ms)
+  if (typeof raw === 'number') {
+    return new Date(raw).toISOString();
+  }
+
+  // Try parsing as ISO/standard date string
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) {
+    return parsed.toISOString();
+  }
+
+  // Handle relative time strings like "2w", "3d", "1mo", "5h", "2 weeks ago"
+  const str = String(raw).toLowerCase().trim();
+  const now = Date.now();
+  const match = str.match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min)/);
+  if (match) {
+    const val = parseInt(match[1]);
+    const unit = match[2];
+    const ms = {
+      mo: 30 * 24 * 3600000, month: 30 * 24 * 3600000,
+      w: 7 * 24 * 3600000, week: 7 * 24 * 3600000,
+      d: 24 * 3600000, day: 24 * 3600000,
+      h: 3600000, hour: 3600000,
+      m: 60000, min: 60000,
+    }[unit] || 0;
+    return new Date(now - val * ms).toISOString();
+  }
+
+  // Fallback to now
+  return new Date().toISOString();
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -25,7 +69,6 @@ export default async function handler(req, res) {
   }).select().single();
 
   try {
-    // Get advisor profile
     const { data: profile } = await db.from('advisor_profile').select('*').single();
     const profileUrl = (profile?.linkedin_profile_url || '').trim();
     const advisorName = (profile?.full_name || '').trim();
@@ -35,7 +78,7 @@ export default async function handler(req, res) {
         status: 'completed', completed_at: new Date().toISOString(),
         results_count: 0, scored_count: 0, errors_count: 0,
       }).eq('id', logEntry?.id);
-      return res.json({ success: true, scraped: 0, stored: 0, errors: 0, message: 'Set your LinkedIn profile URL or name in Profile settings' });
+      return res.json({ success: true, scraped: 0, stored: 0, errors: 0, message: 'Set your LinkedIn profile URL in Profile settings' });
     }
 
     const token = extractApifyToken(process.env.APIFY_API_TOKEN);
@@ -55,15 +98,18 @@ export default async function handler(req, res) {
 
       const dataset = await client.dataset(run.defaultDatasetId).listItems({ limit: 50 });
       items = dataset.items || [];
-      console.log(`[Post History] Got ${items.length} posts from profile`);
-
-      if (items.length > 0) {
-        console.log(`[Post History] First item keys: ${Object.keys(items[0]).join(', ')}`);
-      }
-
       totalScraped = items.length;
 
-      // All posts from the profile URL belong to the advisor — no name filtering needed
+      // Log first item for debugging field names
+      if (items.length > 0) {
+        const first = items[0];
+        console.log(`[Post History] First item keys: ${Object.keys(first).join(', ')}`);
+        console.log(`[Post History] Date fields: postedAt=${first.postedAt}, publishedAt=${first.publishedAt}, createdAt=${first.createdAt}, createdAtTimestamp=${first.createdAtTimestamp}`);
+        console.log(`[Post History] Content fields: content=${(first.content||'').substring(0,50)}, text=${(first.text||'').substring(0,50)}, commentary=${(first.commentary||'').substring(0,50)}`);
+        console.log(`[Post History] URL fields: linkedinUrl=${first.linkedinUrl}, url=${first.url}, postId=${first.postId}`);
+        console.log(`[Post History] Engagement: numLikes=${first.numLikes}, numComments=${first.numComments}, reactionCount=${first.reactionCount}`);
+      }
+
       for (const item of items) {
         try {
           const text = sanitizeText(
@@ -76,14 +122,7 @@ export default async function handler(req, res) {
             (item.shareUrn ? `https://www.linkedin.com/feed/update/${item.shareUrn}` : '');
           if (!postUrl) continue;
 
-          let postedAt = item.postedAt || item.publishedAt || item.postedDate || item.createdAt || null;
-          if (postedAt) {
-            postedAt = new Date(postedAt).toISOString();
-          } else if (item.createdAtTimestamp) {
-            postedAt = new Date(item.createdAtTimestamp).toISOString();
-          } else {
-            postedAt = new Date().toISOString();
-          }
+          const postedAt = parsePostDate(item);
 
           const { error } = await db.from('advisor_posts').upsert({
             post_text: text,
@@ -97,10 +136,10 @@ export default async function handler(req, res) {
           });
 
           if (!error) totalStored++;
-          else { totalErrors++; if (errorDetails.length < 3) errorDetails.push(error.message); }
+          else { totalErrors++; if (errorDetails.length < 5) errorDetails.push(`upsert: ${error.message}`); }
         } catch (err) {
           totalErrors++;
-          if (errorDetails.length < 3) errorDetails.push(err.message);
+          if (errorDetails.length < 5) errorDetails.push(`item: ${err.message}`);
         }
       }
 
@@ -133,9 +172,7 @@ export default async function handler(req, res) {
             (item.shareUrn ? `https://www.linkedin.com/feed/update/${item.shareUrn}` : '');
           if (!postUrl) continue;
 
-          let postedAt = item.postedAt || item.publishedAt || item.postedDate || null;
-          if (postedAt) postedAt = new Date(postedAt).toISOString();
-          else postedAt = new Date().toISOString();
+          const postedAt = parsePostDate(item);
 
           const { error } = await db.from('advisor_posts').upsert({
             post_text: text,
@@ -149,10 +186,10 @@ export default async function handler(req, res) {
           });
 
           if (!error) totalStored++;
-          else { totalErrors++; if (errorDetails.length < 3) errorDetails.push(error.message); }
+          else { totalErrors++; if (errorDetails.length < 5) errorDetails.push(`upsert: ${error.message}`); }
         } catch (err) {
           totalErrors++;
-          if (errorDetails.length < 3) errorDetails.push(err.message);
+          if (errorDetails.length < 5) errorDetails.push(`item: ${err.message}`);
         }
       }
     }
