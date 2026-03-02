@@ -1,213 +1,389 @@
-// POST /api/scrape/post-history — Sync advisor's own LinkedIn posts
-// Uses harvestapi/linkedin-profile-posts with includeReposts: false
+// ═══════════════════════════════════════════════════════
+// THE PULSE v2 — AI Scoring & Generation (Claude API)
+// Uses Haiku for scoring (cost efficient), Sonnet for generation (quality)
+// ═══════════════════════════════════════════════════════
 
-import { createServerClient } from '../../../lib/supabase';
-import { ApifyClient } from 'apify-client';
-import { extractApifyToken, sanitizeText, num } from '../../../lib/utils.js';
-import { classifyPosts } from '../../../lib/ai.js';
+import Anthropic from '@anthropic-ai/sdk';
+import { sanitizeText } from './utils.js';
 
-export const config = { maxDuration: 300 };
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Parse date from actor output — postedAt can be object {timestamp, date} or string
-function parsePostDate(item) {
-  // Actor returns postedAt as object: { timestamp, date, postedAgoShort, postedAgoText }
-  const pa = item.postedAt;
-  if (pa && typeof pa === 'object') {
-    if (pa.timestamp) return new Date(pa.timestamp).toISOString();
-    if (pa.date) {
-      const d = new Date(pa.date);
-      if (!isNaN(d.getTime())) return d.toISOString();
-    }
-    // Try relative: "2w", "1mo"
-    const rel = pa.postedAgoShort || pa.postedAgoText || '';
-    const match = String(rel).match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min|y|year)/i);
-    if (match) {
-      const val = parseInt(match[1]);
-      const ms = { mo:2592e6, month:2592e6, w:6048e5, week:6048e5, d:864e5, day:864e5, h:36e5, hour:36e5, m:6e4, min:6e4, y:31536e6, year:31536e6 }[match[2].toLowerCase()] || 0;
-      return new Date(Date.now() - val * ms).toISOString();
-    }
-  }
-  // Fallback: postedAt as string or number
-  if (typeof pa === 'number') return new Date(pa).toISOString();
-  if (typeof pa === 'string') {
-    const d = new Date(pa);
-    if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
-    const match = pa.match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min|y|year)/i);
-    if (match) {
-      const val = parseInt(match[1]);
-      const ms = { mo:2592e6, month:2592e6, w:6048e5, week:6048e5, d:864e5, day:864e5, h:36e5, hour:36e5, m:6e4, min:6e4, y:31536e6, year:31536e6 }[match[2].toLowerCase()] || 0;
-      return new Date(Date.now() - val * ms).toISOString();
-    }
-  }
-  if (item.createdAtTimestamp) return new Date(item.createdAtTimestamp).toISOString();
-  return new Date().toISOString();
-}
+// ─── LinkedIn Algorithm Rules (invisible to user, always applied) ───
+const LINKEDIN_RULES = `
+LINKEDIN PLATFORM RULES (always follow silently — never reference these rules in output):
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+═══ ALGORITHM & DISTRIBUTION ═══
+- LinkedIn explicitly prioritizes expertise-driven content over viral content. A post with 50 likes from engineers and tech VPs is worth dramatically more than 500 likes from random connections.
+- Expert interactions carry 7-9x more algorithmic weight than random connections. Write to attract experts, not everyone.
+- The first 60-90 minutes after posting determine ~70% of total reach. The opening line must stop the scroll instantly.
+- Content can stay in feeds for 2-3 weeks if it continues generating engagement — quality compounds.
+- Never post more than once per 12-24 hours. A new post cuts off reach from the previous one.
+- Optimal posting cadence: 2-3 times per week, Tuesday through Thursday.
+- Content recycling (identical or similar posts) gets 84% less reach. Every post must feel completely fresh.
+- External links in the post body reduce reach by 25-40%. NEVER include URLs in the post text. Keep all content native to LinkedIn.
+- DM recipients are 90% more likely to see the sender's next post — outreach and content visibility are a feedback loop.
 
-  const db = createServerClient();
-  let totalScraped = 0, totalStored = 0, totalErrors = 0;
-  const errorDetails = [];
+═══ FORMAT & STRUCTURE ═══
+- Text + image posts get 2.4x more engagement, especially infographics. Suggest an image pairing when the topic supports it.
+- Document carousels perform 1.9x better than average (optimal: 9 slides). When a topic suits a step-by-step or comparison format, suggest a carousel outline.
+- Posts under 200 words with short, punchy sentences consistently outperform long essays.
+- Every post needs a scroll-stopping first line. The hook must create an open loop, challenge an assumption, or state something unexpected.
+- Use line breaks between thoughts. No walls of text. White space is a feature.
+- 3-4 niche-specific hashtags is optimal. More than 5 triggers spam filters. Zero misses discoverability. Never use generic hashtags like #finance or #investing — use targeted ones like #equitycomp, #RSUtax, #techcareers.
 
-  const { data: logEntry } = await db.from('scrape_log').insert({
-    pipeline: 'post-history', status: 'running', started_at: new Date().toISOString(),
-  }).select().single();
+═══ VOICE & DIFFERENTIATION ═══
+- 54% of longer English LinkedIn posts are now AI-generated. Voice differentiation is CRITICAL — if it reads like AI wrote it, it fails.
+- Write like a smart friend explaining something at a bar, not a compliance department issuing a memo.
+- Short, punchy sentences. No fluff. No filler. No corporate jargon.
+- Specific dollar amounts, statistics, and concrete examples always outperform vague advice.
+- Contrarian hooks that challenge conventional wisdom with data consistently outperform agreeable content.
+- Niche authority (deep expertise on a narrow topic) outperforms broad-appeal content every time.
+- Actionable insights over platitudes. The reader should be able to DO something after reading.
+- NEVER use these AI tells: "In today's landscape", "It's worth noting", "Let's dive in", "Here's the thing", "At the end of the day", "Game-changer", "Leverage", "Synergy", "Unpack", "Navigate", "Robust". Write like a human with a strong opinion.
+
+═══ ENGAGEMENT BAIT — HARD BAN ═══
+LinkedIn recognizes 70+ linguistic patterns of engagement bait and actively penalizes them. NEVER use any variation of:
+- "Like if you agree" / "Double tap if..." / "Hit the like button"
+- "Comment YES" / "Comment [word] if you want..." / "Drop a [emoji] if..."
+- "Share this with someone who..." / "Tag a friend who..." / "Send this to..."
+- "Follow for more" / "Follow me for daily..." / "Repost to save"
+- "Who else?" / "Am I the only one?" / "Raise your hand if..."
+- "Agree or disagree?" / "Thoughts?" (as a lazy closer — a specific, thoughtful question is fine)
+- Any sentence whose primary purpose is soliciting a like, comment, share, follow, or repost
+
+═══ CONTENT INTEGRITY ═══
+- NEVER fabricate statistics, dollar amounts, percentages, or data points. Every number must come from the source post or be verifiable.
+- If the source post contains a statistic, cite it. If it doesn't, don't invent one.
+- Source URLs must be the exact URL of the source material. Never fabricate or guess a URL.
+- The draft topic MUST align with the source post's core subject. Do not drift to adjacent topics. If the source is about stock taxes generally, the draft is about stock taxes — not specifically RSUs unless the source mentions RSUs.
+
+═══ ANTI-REPETITION ═══
+- NEVER draft on a topic the advisor posted about in the last 14 days.
+- NEVER reuse the same hook structure (contrarian, question, story, data_driven, myth_bust, timely, framework) more than twice in a rolling month.
+- Approximately once every 3-4 weeks, include a continuity callback that references a previous post ("Last week I talked about X — here's the other side").
+- Vary sentence length, paragraph structure, and opening patterns across drafts. Predictable formatting is a tell.
+
+═══ COMPLIANCE (FINANCIAL SERVICES) ═══
+- No guarantees of future performance or returns. No promissory language ("will earn", "will grow", "assured", "certain return").
+- No forward-looking statements presented as certainty. Projections must include cautionary language.
+- No fabricated client scenarios, even anonymized, without noting they are hypothetical.
+- No comparative claims against other firms or advisors.
+- No urgency-driven language designed to pressure action ("act now", "limited time", "don't miss out").
+- No specific security recommendations by ticker symbol without balanced risk discussion.
+- Content must be fair, balanced, and not misleading.
+- The advisor's firm-specific compliance rules (from their settings) take precedence over these defaults.
+
+═══ COMMENT-SPECIFIC RULES ═══
+- Every comment must be at least 15 words. Comments of 15+ words receive 2.5x more algorithmic weight.
+- Length alone is not the goal. A 25-word comment that reads like an expanded "Great post, totally agree!" is worse than useless.
+- The comment must add genuine insight, share a relevant experience, pose a thoughtful question, or offer a specific perspective.
+- Vary comment formats: quick agreement + personal anecdote, contrarian take, insightful question to OP, relevant data point.
+- The goal of every comment is to get the OP or other commenters to click the advisor's profile.
+- NEVER: "Great post!", "Love this!", "So true!", "Couldn't agree more!", generic encouragement, obvious AI language, self-promotion, or pitching services.
+`;
+
+// ─── Content Scoring (Haiku — ~$0.001/post) ───
+
+export async function scoreContent(post, advisorProfile) {
+  const text = sanitizeText(post.post_text || '');
+  if (!text) return null;
+
+  const prompt = `Score this social media post for a financial advisor's content strategy.
+
+ADVISOR CONTEXT:
+- Specialization: ${advisorProfile.specialization || 'equity compensation planning'}
+- Target audience: ${advisorProfile.icp_professions || 'engineers, attorneys, tech employees'} ages ${advisorProfile.icp_age_min || 25}-${advisorProfile.icp_age_max || 45}
+- Topics they cover: ${advisorProfile.topics_always || 'RSUs, ISOs, NSOs, Solo 401(k), Roth conversions, concentrated stock'}
+
+POST TO SCORE:
+Platform: ${post.platform}
+Creator: ${post.creator_name || 'Unknown'}
+Text: ${text.slice(0, 1500)}
+Engagement: ${post.likes ?? 0} likes, ${post.comments ?? 0} comments, ${post.shares ?? 0} shares
+
+SCORING RULES (CRITICAL):
+- expertise_signal (0-100): Does this content demonstrate expertise? 
+  * 0 engagement = score 0-10 max. NEVER above 20 if likes+comments+shares = 0
+  * 50-500 likes = 30-60
+  * 500+ likes = 60-90
+  * Velocity matters: 50 likes in 2 hours > 500 likes in 3 days
+- icp_relevance (0-100): How closely does this map to the advisor's expertise areas and audience interests?
+- suggested_angle: One line — how could the advisor create their own post riffing on this?
+
+Respond ONLY with valid JSON, no markdown:
+{"expertise_signal": <number>, "icp_relevance": <number>, "suggested_angle": "<string>"}`;
 
   try {
-    const { data: profile } = await db.from('advisor_profile').select('*').single();
-    const profileUrl = (profile?.linkedin_profile_url || '').trim();
-    const advisorName = (profile?.full_name || '').trim();
-
-    if (!profileUrl && !advisorName) {
-      await db.from('scrape_log').update({
-        status: 'completed', completed_at: new Date().toISOString(),
-        results_count: 0, scored_count: 0, errors_count: 0,
-      }).eq('id', logEntry?.id);
-      return res.json({ success: true, scraped: 0, stored: 0, errors: 0, message: 'Set your LinkedIn profile URL in Profile settings' });
-    }
-
-    const token = extractApifyToken(process.env.APIFY_API_TOKEN);
-    const client = new ApifyClient({ token });
-
-    if (profileUrl) {
-      const slug = profileUrl.replace(/\/$/, '').split('/').pop();
-      const fullUrl = profileUrl.startsWith('http') ? profileUrl : `https://www.linkedin.com/in/${slug}`;
-
-      console.log(`[Post History] Scraping profile posts from: ${fullUrl}`);
-      const run = await client.actor('harvestapi/linkedin-profile-posts').call({
-        profileUrls: [fullUrl],
-        maxPosts: 50,
-        includeReposts: false,  // Actor-level repost filtering
-      }, { waitSecs: 120 });
-
-      const dataset = await client.dataset(run.defaultDatasetId).listItems({ limit: 50 });
-      const items = dataset.items || [];
-      totalScraped = items.length;
-
-      if (items.length > 0) {
-        const first = items[0];
-        console.log(`[Post History] Keys: ${Object.keys(first).join(', ')}`);
-        console.log(`[Post History] postedAt type: ${typeof first.postedAt}, value: ${JSON.stringify(first.postedAt)}`);
-        console.log(`[Post History] engagement keys: ${first.engagement ? Object.keys(first.engagement).join(', ') : 'none'}`);
-        console.log(`[Post History] engagement: ${JSON.stringify(first.engagement)}`);
-      }
-
-      for (const item of items) {
-        try {
-          const text = sanitizeText(
-            item.content || item.text || item.commentary || item.postText || item.title || ''
-          );
-          if (!text || text.length < 10) continue;
-
-          const postUrl = item.linkedinUrl || item.url || item.postUrl ||
-            (item.postId ? `https://www.linkedin.com/feed/update/urn:li:activity:${item.postId}` : '') ||
-            (item.shareUrn ? `https://www.linkedin.com/feed/update/${item.shareUrn}` : '');
-          if (!postUrl) continue;
-
-          const postedAt = parsePostDate(item);
-
-          // Extract engagement — actor may nest under engagement object or top-level
-          const eng = item.engagement || {};
-          const likes = num(eng.likes, eng.numLikes, item.numLikes, item.likes, 0);
-          const comments = num(eng.comments, eng.numComments, item.numComments, item.comments, 0);
-          const impressions = num(eng.impressions, eng.numImpressions, eng.views, item.numImpressions, item.impressions, 0);
-
-          const { error } = await db.from('advisor_posts').upsert({
-            post_text: text,
-            linkedin_url: postUrl,
-            posted_at: postedAt,
-            likes,
-            comments,
-            impressions,
-            source: 'linkedin_sync',
-          }, {
-            onConflict: 'linkedin_url',
-            ignoreDuplicates: false,
-          });
-
-          if (!error) totalStored++;
-          else { totalErrors++; if (errorDetails.length < 5) errorDetails.push(`upsert: ${error.message}`); }
-        } catch (err) {
-          totalErrors++;
-          if (errorDetails.length < 5) errorDetails.push(`item: ${err.message}`);
-        }
-      }
-
-    } else {
-      // Fallback: name search
-      const run = await client.actor('harvestapi/linkedin-post-search').call({
-        searchQueries: [advisorName], maxPosts: 30, sortBy: 'date',
-      }, { waitSecs: 120 });
-      const dataset = await client.dataset(run.defaultDatasetId).listItems({ limit: 30 });
-      const items = dataset.items || [];
-      totalScraped = items.length;
-      const nameWords = advisorName.toLowerCase().split(/\s+/);
-
-      for (const item of items) {
-        try {
-          const authorName = (item.author?.name || item.authorName || '').toLowerCase();
-          if (nameWords.filter(w => authorName.includes(w)).length < Math.max(1, nameWords.length - 1)) continue;
-          const text = sanitizeText(item.text || item.title || item.postText || item.content || '');
-          if (!text || text.length < 10) continue;
-          const postUrl = item.linkedinUrl || item.url || (item.shareUrn ? `https://www.linkedin.com/feed/update/${item.shareUrn}` : '');
-          if (!postUrl) continue;
-          const eng = item.engagement || {};
-
-          const { error } = await db.from('advisor_posts').upsert({
-            post_text: text, linkedin_url: postUrl, posted_at: parsePostDate(item),
-            likes: num(eng.likes, item.numLikes, 0),
-            comments: num(eng.comments, item.numComments, 0),
-            impressions: num(eng.impressions, item.numImpressions, 0),
-            source: 'linkedin_sync',
-          }, { onConflict: 'linkedin_url', ignoreDuplicates: false });
-
-          if (!error) totalStored++;
-          else { totalErrors++; if (errorDetails.length < 5) errorDetails.push(error.message); }
-        } catch (err) { totalErrors++; }
-      }
-    }
-
-    console.log(`[Post History] Done: ${totalScraped} scraped, ${totalStored} stored, ${totalErrors} errors`);
-
-    // Classify all posts using user's categories
-    let classified = 0;
-    try {
-      const categories = JSON.parse(profile?.post_categories || '[]');
-      if (categories.length > 0) {
-        const { data: allDbPosts } = await db.from('advisor_posts')
-          .select('id, post_text, topic_tags')
-          .order('posted_at', { ascending: false });
-
-        if (allDbPosts && allDbPosts.length > 0) {
-          console.log(`[Post History] Classifying ${allDbPosts.length} posts into categories: ${categories.join(', ')}`);
-          const results = await classifyPosts(allDbPosts, categories);
-          for (const r of results) {
-            await db.from('advisor_posts').update({ topic_tags: [r.category] }).eq('id', r.id);
-            classified++;
-          }
-          console.log(`[Post History] Classified ${classified} posts`);
-        }
-      }
-    } catch (classErr) {
-      console.error('[Post History] Classification error:', classErr.message);
-    }
-
-    await db.from('scrape_log').update({
-      results_count: totalScraped, scored_count: totalStored, errors_count: totalErrors,
-      status: 'completed', completed_at: new Date().toISOString(),
-    }).eq('id', logEntry?.id);
-
-    return res.json({ success: true, scraped: totalScraped, stored: totalStored, classified, errors: totalErrors, errorDetails });
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = response.content[0].text.replace(/```json|```/g, '').trim();
+    return JSON.parse(raw);
   } catch (err) {
-    console.error('[Post History] Pipeline error:', err);
-    await db.from('scrape_log').update({
-      results_count: totalScraped, scored_count: totalStored, errors_count: totalErrors,
-      status: 'error', completed_at: new Date().toISOString(),
-    }).eq('id', logEntry?.id);
-    return res.status(500).json({ success: false, error: err.message, errorDetails });
+    console.error('Content scoring error:', err.message);
+    return null;
+  }
+}
+
+// ─── Comment Scoring (Haiku — ~$0.001/post) ───
+
+export async function scoreComment(post, advisorProfile) {
+  const text = sanitizeText(post.post_text || '');
+  if (!text) return null;
+
+  const prompt = `Score this LinkedIn post for comment opportunity value for a financial advisor.
+
+ADVISOR: ${advisorProfile.full_name || 'Financial Advisor'} — ${advisorProfile.specialization || 'equity compensation planning'}
+TARGET AUDIENCE: ${advisorProfile.icp_professions || 'engineers, attorneys, tech employees'}
+
+POST:
+Author: ${post.creator_name || 'Unknown'} — ${post.creator_title || ''} at ${post.creator_company || ''}
+Text: ${text.slice(0, 1500)}
+Engagement: ${post.likes ?? 0} likes, ${post.comments ?? 0} comments
+Age: ${post.post_age_hours ?? 0} hours
+
+SCORE ON FOUR DIMENSIONS (each 0-100):
+1. icp_magnet: How likely is the advisor's target demographic engaging with this post/creator?
+2. engagement_window: Is this post in the sweet spot (2-8 hours, accelerating)? Posts past peak = low score.
+3. authority_positioning: Can the advisor demonstrate expertise here without being salesy?
+4. conversation_starter: Will engaging here create a natural path to a follow or DM?
+
+Also provide:
+- comment_priority: weighted composite (icp_magnet×0.3 + engagement_window×0.25 + authority_positioning×0.25 + conversation_starter×0.2)
+- topic_tag: one of [tech_careers, legal_careers, financial, equity_comp, leadership, investing, other]
+
+Respond ONLY with valid JSON, no markdown:
+{"icp_magnet": <n>, "engagement_window": <n>, "authority_positioning": <n>, "conversation_starter": <n>, "comment_priority": <n>, "topic_tag": "<string>"}`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = response.content[0].text.replace(/```json|```/g, '').trim();
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Comment scoring error:', err.message);
+    return null;
+  }
+}
+
+// ─── Draft Generation (Sonnet — ~$0.03/draft) ───
+
+export async function generateDraft(sourcePost, advisorProfile, postHistory, voiceSamples, contentPrefs) {
+  const recentTopics = postHistory.slice(0, 10).flatMap(p => p.topic_tags || []);
+  const recentHooks = postHistory.slice(0, 10).map(p => p.hook_type).filter(Boolean);
+  const voiceText = voiceSamples.map(s => `---\n${s.sample_text}`).join('\n');
+
+  const prompt = `You are a LinkedIn post ghostwriter for a financial advisor. Generate ONE post draft.
+
+ADVISOR:
+Name: ${advisorProfile.full_name || 'Advisor'}
+Firm: ${advisorProfile.firm || ''}
+Specialization: ${advisorProfile.specialization || 'equity compensation'}
+Tagline: ${advisorProfile.tagline || ''}
+
+VOICE SAMPLES (match this writing style exactly):
+${voiceText || 'No samples yet — write in a punchy, direct, smart-friend-at-a-bar tone.'}
+
+TONE RULES:
+${advisorProfile.tone_rules || 'Short, punchy sentences. No fluff. Like a smart friend at a bar.'}
+
+POST RULES:
+- Preferred length: ${advisorProfile.preferred_length || 'Under 200 words'}
+- Preferred formats: ${advisorProfile.preferred_formats || 'Contrarian hooks, data-driven analysis'}
+- Content preferences: ${contentPrefs.map(p => p.label).join(', ') || 'Contrarian takes, data analysis'}
+
+ANTI-REPETITION (do NOT draft on these recent topics):
+${recentTopics.join(', ') || 'none yet'}
+
+STRUCTURAL VARIETY (do NOT use these hook types — use something different):
+${recentHooks.join(', ') || 'none yet'}
+
+TOPICS TO NEVER COVER:
+${advisorProfile.topics_never || 'Crypto, insurance products, specific stock picks, politics'}
+
+COMPLIANCE RULES:
+${advisorProfile.compliance_rules || 'No guarantees, no forward-looking statements, no fabricated scenarios'}
+
+SOURCE POST TO RIFF ON:
+Platform: ${sourcePost.platform}
+URL: ${sourcePost.url || 'unavailable'}
+Text: ${sanitizeText(sourcePost.post_text || '').slice(0, 2000)}
+Engagement: ${sourcePost.likes ?? 0} likes, ${sourcePost.comments ?? 0} comments
+Suggested angle: ${sourcePost.suggested_angle || 'Create a unique take on this topic'}
+
+SOURCE ALIGNMENT RULES:
+- Your draft MUST be about the same core topic as the source post. Do not drift to adjacent topics.
+- If the source is about general stock taxes, your draft should be about stock taxes — not RSUs specifically unless the source mentions RSUs.
+- "source_urls" in your response MUST be the exact URL above (or null if unavailable). Never fabricate a URL.
+
+${LINKEDIN_RULES}
+
+CRITICAL RULES:
+- Match the advisor's voice samples exactly — not generic AI writing
+- Post must be ready to edit in 2-3 minutes, not a rough outline
+
+Respond ONLY with valid JSON, no markdown:
+{
+  "draft_text": "<full post text>",
+  "topic_tags": ["<tag1>", "<tag2>"],
+  "hook_type": "<contrarian|question|data_driven|story|myth_bust|timely|framework>",
+  "image_suggestion": "<one-line image idea or null>",
+  "hashtags": ["<tag1>", "<tag2>"] or null,
+  "source_urls": "<url or null>",
+  "continuity_reference": "<reference to previous post or null>"
+}`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const raw = response.content[0].text.replace(/```json|```/g, '').trim();
+    return JSON.parse(raw);
+  } catch (err) {
+    console.error('Draft generation error:', err.message);
+    return null;
+  }
+}
+
+// ─── Comment Generation (Sonnet — ~$0.02/comment) ───
+
+export async function generateComment(post, advisorProfile, commentVoiceSamples) {
+  const voiceText = commentVoiceSamples.map(s => `---\n${s.sample_text}`).join('\n');
+
+  const prompt = `Write a LinkedIn comment for a financial advisor to post on this post.
+
+ADVISOR: ${advisorProfile.full_name || 'Advisor'} — ${advisorProfile.specialization || 'equity compensation planning'}
+EXPERTISE AREAS: ${advisorProfile.topics_always || 'RSUs, ISOs, Solo 401(k), Roth conversions, concentrated stock'}
+
+COMMENT VOICE SAMPLES (match this style):
+${voiceText || 'Quick, substantive, adds genuine value. Never preachy. Humor when natural.'}
+
+POST:
+Author: ${post.creator_name || 'Unknown'} — ${post.creator_title || ''} at ${post.creator_company || ''}
+Text: ${sanitizeText(post.post_text || '').slice(0, 1500)}
+
+${LINKEDIN_RULES}
+
+REQUIREMENTS:
+- Minimum 15 words, but substance is the actual requirement
+- Must add genuine insight, personal experience, smart question, or specific perspective
+- Vary format: quick insight + experience, contrarian take, question to OP, relevant data point
+- NEVER: generic encouragement ("Great post!"), obvious AI language, self-promotion, pitching
+- Goal: get the OP or other commenters to click the advisor's profile
+
+Respond ONLY with the comment text, nothing else. No quotes, no JSON.`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return response.content[0].text.trim();
+  } catch (err) {
+    console.error('Comment generation error:', err.message);
+    return null;
+  }
+}
+
+// ─── Post Classification (Haiku — ~$0.002/batch of 10) ───
+
+export async function classifyPosts(posts, categories) {
+  if (!posts.length || !categories.length) return [];
+
+  // Process in batches of 10
+  const results = [];
+  for (let i = 0; i < posts.length; i += 10) {
+    const batch = posts.slice(i, i + 10);
+    const postList = batch.map((p, idx) => 
+      `[${idx}] ${(p.post_text || '').slice(0, 500)}`
+    ).join('\n\n');
+
+    const prompt = `Classify each post into exactly ONE category from the list below.
+
+CATEGORIES: ${categories.join(', ')}
+
+CLASSIFICATION RULES:
+- Read the FULL post text carefully. Look for keywords, topics, and themes.
+- Match based on the PRIMARY subject matter, not just a passing mention.
+- Be generous with matching — if a post mentions "market", "S&P", "stocks", "economy", "fed", "rates", "bull/bear", or any market-related topic, it likely fits a market-related category.
+- If a post discusses retirement accounts, 401k, IRA, Roth, or pensions, match to the most specific retirement category available.
+- If a post discusses RSUs, ISOs, NSOs, stock options, equity grants, or vesting, match to the equity-related category.
+- If a post discusses tax planning, tax optimization, capital gains, or tax strategy, match to the tax-related category.
+- A post about a personal story, family, or life event should go to a personal/family category if one exists.
+- Only use "General" as an absolute last resort when NO category fits at all. Strongly prefer matching to an existing category.
+- When in doubt between two categories, choose the MORE SPECIFIC one.
+
+POSTS:
+${postList}
+
+Respond ONLY with valid JSON array, no markdown:
+[{"index": 0, "category": "<category>"}, {"index": 1, "category": "<category>"}, ...]`;
+
+    try {
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const raw = response.content[0].text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(raw);
+      
+      for (const item of parsed) {
+        const post = batch[item.index];
+        if (post) {
+          results.push({ id: post.id, category: categories.includes(item.category) ? item.category : (item.category === 'General' ? 'General' : categories[0]) });
+        }
+      }
+    } catch (err) {
+      console.error('Classification error:', err.message);
+      // Fallback: assign General to all in this batch
+      for (const post of batch) {
+        results.push({ id: post.id, category: 'General' });
+      }
+    }
+  }
+  return results;
+}
+
+// ─── Outreach Generation (Sonnet — ~$0.01/message) ───
+
+export async function generateOutreach(lead, advisorProfile) {
+  const prompt = `Write a LinkedIn DM conversation starter for a financial advisor.
+
+ADVISOR: ${advisorProfile.full_name || 'Advisor'} — ${advisorProfile.specialization || 'equity compensation planning'}
+TAGLINE: ${advisorProfile.tagline || ''}
+
+LEAD:
+Name: ${lead.name}
+Title: ${lead.title || ''}
+Company: ${lead.company || ''}
+How they engaged: ${lead.interaction_text || ''}
+
+RULES:
+- Maximum 2-3 sentences. Start a conversation, don't deliver a pitch.
+- MUST reference the actual interaction — never generic.
+- Never suggest pitching in the first message.
+- Tone: warm, direct, professional but not corporate.
+
+Respond ONLY with the message text, nothing else.`;
+
+  try {
+    const response = await client.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    return response.content[0].text.trim();
+  } catch (err) {
+    console.error('Outreach generation error:', err.message);
+    return null;
   }
 }
