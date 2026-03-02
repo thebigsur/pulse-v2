@@ -258,7 +258,7 @@ function PostsView() {
   const [expandedApproved, setExpandedApproved] = useState({});
 
   // Save-to-history state
-  const [savePanel, setSavePanel] = useState({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false });
+  // Manual save-to-history removed — post history comes from LinkedIn sync only
 
   // Edit/delete state for post history
   const [editingPost, setEditingPost] = useState(null);
@@ -290,16 +290,7 @@ function PostsView() {
   const handleApprove = async (draft) => {
     try {
       await apiApprove(draft.id);
-      // Open save panel pre-filled with the approved draft
-      setSavePanel({
-        open: true,
-        text: draft.text,
-        topicTags: draft.topicTags || [],
-        hookType: draft.hookType || null,
-        saving: false,
-        saved: false,
-      });
-      // Also copy to clipboard
+      // Copy to clipboard for easy paste to LinkedIn
       navigator.clipboard.writeText(draft.text).catch(() => {});
     } catch (err) {
       console.error('Approve failed:', err);
@@ -310,39 +301,11 @@ function PostsView() {
     try { await apiSkip(id); } catch (err) { console.error('Skip failed:', err); }
   };
 
-  const handleSaveToHistory = async () => {
-    if (!savePanel.text.trim()) return;
-    setSavePanel(s => ({ ...s, saving: true }));
-    try {
-      await fetch('/api/post-history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          post_text: savePanel.text.trim(),
-          topic_tags: savePanel.topicTags,
-          hook_type: savePanel.hookType,
-        }),
-      });
-      setSavePanel(s => ({ ...s, saving: false, saved: true }));
-      refetchPerf?.();
-      setTimeout(() => setSavePanel({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false }), 1500);
-    } catch (err) {
-      console.error('Save to history failed:', err);
-      setSavePanel(s => ({ ...s, saving: false }));
-    }
-  };
-
   const handleCopy = (draft) => {
     navigator.clipboard.writeText(draft.text).then(() => {
       setCopied(c => ({ ...c, [draft.id]: true }));
       setTimeout(() => setCopied(c => ({ ...c, [draft.id]: false })), 2000);
     }).catch(() => {});
-  };
-
-  // Manual paste (not from an approved draft)
-  const [showPaste, setShowPaste] = useState(false);
-  const openManualPaste = () => {
-    setSavePanel({ open: true, text: "", topicTags: [], hookType: null, saving: false, saved: false });
   };
 
   const handleEditPost = (p) => {
@@ -397,7 +360,7 @@ function PostsView() {
         </div>
       )}
 
-      {!loading && !currentDraft && approvedDrafts.length === 0 && !savePanel.open && (
+      {!loading && !currentDraft && approvedDrafts.length === 0 && (
         <div style={{ padding: "60px 0", textAlign: "center" }}>
           <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No drafts yet</p>
           <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Run the content pipeline to generate drafts from trending content.</p>
@@ -406,69 +369,8 @@ function PostsView() {
 
       {!loading && (currentDraft || approvedDrafts.length > 0) && <>
 
-        {/* Save-to-history panel — appears after Approve or manual paste */}
-        {savePanel.open && (
-          <div style={{
-            marginBottom: 32, padding: "20px 24px", borderRadius: 8,
-            background: C.elevated, border: `1px solid ${C.green}40`,
-            animation: "fadeIn 0.2s ease",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <p style={{ fontSize: 10, fontFamily: F.mono, color: C.green, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                Save to post history
-              </p>
-              <p style={{ fontSize: 11, color: C.textGhost }}>
-                Edit below to match what you posted on LinkedIn
-              </p>
-            </div>
-            <textarea
-              value={savePanel.text}
-              onChange={e => setSavePanel(s => ({ ...s, text: e.target.value }))}
-              placeholder="Paste the full text of your LinkedIn post here..."
-              rows={8}
-              style={{
-                width: "100%", background: "transparent", border: "none",
-                borderBottom: `1px solid ${C.stroke}`, color: C.text,
-                fontSize: 14, fontFamily: F.sans, padding: "10px 0",
-                lineHeight: 1.65, resize: "vertical",
-              }}
-              onFocus={e => e.target.style.borderBottomColor = C.gold}
-              onBlur={e => e.target.style.borderBottomColor = C.stroke}
-            />
-            <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center" }}>
-              <Btn primary onClick={handleSaveToHistory}>
-                {savePanel.saved ? <><Icons.check /> Saved</> : savePanel.saving ? "Saving..." : "Save to History"}
-              </Btn>
-              <Btn ghost onClick={() => setSavePanel({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false })}>
-                Skip
-              </Btn>
-              {savePanel.text.trim() && (
-                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginLeft: 8 }}>
-                  {wordCount(savePanel.text)}w
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Paste shortcut — only show when save panel is NOT open */}
-        {!savePanel.open && (
-          <button onClick={openManualPaste} style={{
-            width: "100%", padding: "16px 18px", borderRadius: 8,
-            background: "transparent", border: `1px dashed ${C.stroke}`,
-            color: C.textGhost, fontSize: 13, fontFamily: F.sans,
-            cursor: "pointer", textAlign: "left", marginBottom: 32,
-            transition: "all 0.15s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = C.strokeHover; e.currentTarget.style.color = C.textFaint; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = C.stroke; e.currentTarget.style.color = C.textGhost; }}
-          >
-            + Paste your latest LinkedIn post to update history
-          </button>
-        )}
-
         {/* ─── Current Draft (one at a time) ─── */}
-        {currentDraft && !savePanel.open && (() => {
+        {currentDraft && (() => {
           const draft = currentDraft;
           const tc = getTopicColor(draft.topic);
 
@@ -569,7 +471,7 @@ function PostsView() {
         })()}
 
         {/* All caught up state */}
-        {!currentDraft && !savePanel.open && (
+        {!currentDraft && (
           <div style={{ padding: "50px 0", animation: "fadeIn 0.3s ease" }}>
             <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All caught up.</p>
             <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
@@ -997,59 +899,7 @@ function OutreachView() {
 // ═══════════════════════════════════════════
 
 function PerformanceView() {
-  const { data: perfData, loading, logPerformance, refetch } = usePerformance();
-  const [logLikes, setLogLikes] = useState("");
-  const [logComments, setLogComments] = useState("");
-  const [logImpressions, setLogImpressions] = useState("");
-  const [selectedPost, setSelectedPost] = useState("");
-  const [logSaved, setLogSaved] = useState(false);
-
-  // Edit/delete state
-  const [editingPost, setEditingPost] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [editLikes, setEditLikes] = useState("");
-  const [editComments, setEditComments] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-
-  const handleEditPost = (p) => {
-    setEditingPost(p.id);
-    setEditText(p.post_text || "");
-    setEditLikes(String(p.likes || 0));
-    setEditComments(String(p.comments || 0));
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingPost) return;
-    setEditSaving(true);
-    try {
-      await fetch('/api/post-history', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingPost,
-          post_text: editText,
-          likes: parseInt(editLikes) || 0,
-          comments: parseInt(editComments) || 0,
-        }),
-      });
-      refetch?.();
-      setEditingPost(null);
-    } catch (err) { console.error('Edit failed:', err); }
-    setEditSaving(false);
-  };
-
-  const handleDeletePost = async (id) => {
-    try {
-      await fetch('/api/post-history', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      refetch?.();
-      setConfirmDelete(null);
-    } catch (err) { console.error('Delete failed:', err); }
-  };
+  const { data: perfData, loading, refetch } = usePerformance();
 
   const posts = perfData.posts || [];
   const metrics = perfData.metrics || [];
@@ -1095,16 +945,6 @@ function PerformanceView() {
   })).sort((a, b) => b.avg - a.avg);
   const maxAvg = topicList.length > 0 ? topicList[0].avg : 1;
 
-  const handleLog = async () => {
-    if (!selectedPost) return;
-    try {
-      await logPerformance(selectedPost, parseInt(logLikes) || 0, parseInt(logComments) || 0);
-      setLogSaved(true);
-      setLogLikes(""); setLogComments(""); setLogImpressions(""); setSelectedPost("");
-      setTimeout(() => setLogSaved(false), 2000);
-    } catch (err) { console.error('Log failed:', err); }
-  };
-
   if (loading) return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle sub="Last 30 days">Performance</SectionTitle>
@@ -1141,47 +981,16 @@ function PerformanceView() {
         {/* Top posts */}
         <div>
           <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Top posts</p>
-          {posts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts logged yet.</p>}
+          {posts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts synced yet. Run Post History Sync in Settings.</p>}
           {posts.sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 10).map((p, i) => {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
 
-            if (editingPost === p.id) return (
-              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, borderRadius: 4, margin: "0 -8px", animation: "fadeIn 0.2s ease" }}>
-                <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={4}
-                  style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.gold}`, color: C.text, fontSize: 13, fontFamily: F.sans, padding: "6px 0", lineHeight: 1.5, resize: "vertical" }} />
-                <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Likes</span>
-                    <input value={editLikes} onChange={e => setEditLikes(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Comments</span>
-                    <input value={editComments} onChange={e => setEditComments(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
-                  </div>
-                  <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                    <Btn primary onClick={handleSaveEdit} style={{ padding: "4px 12px", fontSize: 11 }}>{editSaving ? "Saving..." : "Save"}</Btn>
-                    <Btn ghost onClick={() => setEditingPost(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
-                  </div>
-                </div>
-              </div>
-            );
-
-            if (confirmDelete === p.id) return (
-              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, margin: "0 -8px", display: "flex", alignItems: "center", justifyContent: "space-between", animation: "fadeIn 0.15s ease" }}>
-                <span style={{ fontSize: 12, color: C.coral }}>Delete this post?</span>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <Btn onClick={() => handleDeletePost(p.id)} style={{ padding: "4px 12px", fontSize: 11, background: C.coral, color: "#fff", border: "none" }}>Delete</Btn>
-                  <Btn ghost onClick={() => setConfirmDelete(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
-                </div>
-              </div>
-            );
-
             return (
-              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px", position: "relative" }}
-                onMouseEnter={e => { e.currentTarget.style.background = C.surfaceHover; const a = e.currentTarget.querySelector('.perf-actions'); if(a) a.style.opacity = 1; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; const a = e.currentTarget.querySelector('.perf-actions'); if(a) a.style.opacity = 0; }}>
+              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px" }}
+                onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, marginRight: 16 }}>
                     <p style={{ fontSize: 14, color: C.text, lineHeight: 1.5, marginBottom: 6 }}>{(p.post_text || "").substring(0, 80)}...</p>
@@ -1191,19 +1000,7 @@ function PerformanceView() {
                       {p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }}><Icons.external /></a>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                    <div className="perf-actions" style={{ display: "flex", gap: 4, opacity: 0, transition: "opacity 0.15s" }}>
-                      <button onClick={() => handleEditPost(p)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
-                        onMouseEnter={e => e.currentTarget.style.color = C.gold}
-                        onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>edit</button>
-                      <button onClick={() => setConfirmDelete(p.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
-                        onMouseEnter={e => e.currentTarget.style.color = C.coral}
-                        onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>×</button>
-                    </div>
-                    <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes || 0} · {p.comments || 0}</p>
-                  </div>
+                  <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2, flexShrink: 0 }}>{p.likes || 0} · {p.comments || 0}</p>
                 </div>
               </div>
             );
@@ -1244,32 +1041,6 @@ function PerformanceView() {
         </div>
       </div>
 
-      {/* Log performance */}
-      <Separator />
-      <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Log performance</p>
-      <p style={{ fontSize: 12, color: C.textFaint, marginBottom: 16 }}>After a post has been live for 48 hours, log engagement below.</p>
-      <div style={{ display: "flex", gap: 14, alignItems: "flex-end" }}>
-        <div style={{ flex: 1 }}>
-          <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Post</label>
-          <select value={selectedPost} onChange={e => setSelectedPost(e.target.value)} style={{ width: "100%", background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 14px", fontSize: 13, fontFamily: F.sans }}>
-            <option value="">Select a recent post...</option>
-            {posts.filter(p => !p.performance_logged).map(p => (
-              <option key={p.id} value={p.id}>{(p.post_text || "").substring(0, 55)}...</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Likes</label>
-          <input value={logLikes} onChange={e => setLogLikes(e.target.value)} placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
-        </div>
-        <div>
-          <label style={{ fontSize: 11, color: C.textGhost, display: "block", marginBottom: 8, fontFamily: F.mono, textTransform: "uppercase", letterSpacing: "0.08em" }}>Comments</label>
-          <input value={logComments} onChange={e => setLogComments(e.target.value)} placeholder="0" style={{ width: 68, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 6, color: C.text, padding: "10px 12px", fontSize: 14, fontFamily: F.mono, textAlign: "center" }} />
-        </div>
-        <Btn primary onClick={handleLog} style={{ padding: "10px 20px" }}>
-          {logSaved ? <><Icons.check /> Saved</> : "Log"}
-        </Btn>
-      </div>
     </div>
   );
 }
