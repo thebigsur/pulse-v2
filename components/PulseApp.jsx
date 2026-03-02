@@ -1002,10 +1002,11 @@ function PerformanceView() {
   };
 
   // Aggregate: period average graded against all-time median
+  // All Time doesn't get a letter grade — it IS the baseline. Grading it against itself is circular.
   const periodAvgScore = scoredPosts.length > 0
     ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
     : null;
-  const avgGrade = periodAvgScore !== null ? getGrade(periodAvgScore) : { letter: "—", color: C.textGhost };
+  const avgGrade = (periodAvgScore !== null && period !== "all_time") ? getGrade(periodAvgScore) : { letter: "—", color: C.textGhost };
   const avgEngDisplay = periodAvgScore !== null ? Math.round(periodAvgScore).toLocaleString() : "—";
   const totalLikes = filteredPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
   const totalComments = filteredPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
