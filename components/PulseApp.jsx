@@ -1144,9 +1144,9 @@ function PerformanceView() {
             const grade = getGrade(engRate);
 
             return (
-              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px" }}
-                onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px", position: "relative", zIndex: editingCat === p.id ? 10 : 1 }}
+                onMouseEnter={e => { if (editingCat !== p.id) e.currentTarget.style.background = C.surfaceHover; }}
+                onMouseLeave={e => { if (editingCat !== p.id) e.currentTarget.style.background = "transparent"; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, marginRight: 16 }}>
                     <p style={{ fontSize: 14, color: C.text, lineHeight: 1.5, marginBottom: 6 }}>{(p.post_text || "").substring(0, 80)}...</p>
@@ -1159,11 +1159,16 @@ function PerformanceView() {
                           <Tag color={tc.fg} bg={tc.bg}>{tag}</Tag>
                         </div>
                         {editingCat === p.id && (
-                          <div style={{
-                            position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 50,
-                            background: C.elevated, border: `1px solid ${C.stroke}`, borderRadius: 6,
-                            boxShadow: "0 8px 24px rgba(0,0,0,0.4)", minWidth: 180, maxHeight: 240, overflowY: "auto",
-                            padding: "4px 0",
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            onMouseEnter={(e) => e.stopPropagation()}
+                            onMouseLeave={(e) => e.stopPropagation()}
+                            style={{
+                              position: "absolute", top: "100%", left: 0, marginTop: 4, zIndex: 9999,
+                              background: "#242428", border: `1px solid rgba(255,255,255,0.12)`, borderRadius: 8,
+                              boxShadow: "0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)", 
+                              minWidth: 200, maxHeight: 260, overflowY: "auto",
+                              padding: "6px 0", isolation: "isolate",
                           }}>
                             {allCategories.map((cat) => {
                               const catColor = getTopicColor(cat);
@@ -1171,15 +1176,15 @@ function PerformanceView() {
                               return (
                                 <button key={cat} onClick={(e) => { e.stopPropagation(); handleCategoryChange(p.id, cat); }}
                                   style={{
-                                    display: "flex", alignItems: "center", gap: 8, width: "100%",
-                                    padding: "8px 12px", border: "none", cursor: "pointer",
-                                    background: isActive ? C.surfaceHover : "transparent",
-                                    color: isActive ? C.text : C.textFaint,
+                                    display: "flex", alignItems: "center", gap: 10, width: "100%",
+                                    padding: "9px 14px", border: "none", cursor: "pointer",
+                                    background: isActive ? "rgba(255,255,255,0.08)" : "transparent",
+                                    color: isActive ? "#fff" : "rgba(255,255,255,0.7)",
                                     fontSize: 12, fontFamily: F.mono, textAlign: "left",
                                     transition: "background 0.1s",
                                   }}
-                                  onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}
+                                  onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+                                  onMouseLeave={e => { e.stopPropagation(); e.currentTarget.style.background = isActive ? "rgba(255,255,255,0.08)" : "transparent"; }}
                                 >
                                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: catColor.fg, flexShrink: 0 }} />
                                   {cat}
