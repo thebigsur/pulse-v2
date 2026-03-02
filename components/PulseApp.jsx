@@ -44,19 +44,31 @@ const C = {
   silver: "#8A8A8A",        // Neutral / secondary
 };
 
-// Topic → color mapping (meaningful: each topic area has a color)
-const TOPIC_COLORS = {
-  "RSU Taxation": { fg: C.coral, bg: C.coralSoft },
-  "High-Earner Psychology": { fg: C.purple, bg: C.purpleSoft },
-  "Market Valuations": { fg: C.blue, bg: C.blueSoft },
-  "Solo 401(k)": { fg: C.green, bg: C.greenSoft },
-  "Roth Conversions": { fg: "#D4A86A", bg: "rgba(212,168,106,0.10)" },
-  "Equity Comp": { fg: C.coral, bg: C.coralSoft },
-  "Valuations": { fg: C.blue, bg: C.blueSoft },
-  "Psychology": { fg: C.purple, bg: C.purpleSoft },
-};
+// Topic → color mapping: dynamic palette for user-defined categories
+const CATEGORY_PALETTE = [
+  { fg: "#D4806A", bg: "rgba(212,128,106,0.12)" },   // coral
+  { fg: "#6A9FD8", bg: "rgba(106,159,216,0.12)" },   // blue
+  { fg: "#6DAF7B", bg: "rgba(109,175,123,0.12)" },   // green
+  { fg: "#9B84C9", bg: "rgba(155,132,201,0.12)" },   // purple
+  { fg: "#C8A96E", bg: "rgba(200,169,110,0.12)" },   // gold
+  { fg: "#D4A06A", bg: "rgba(212,160,106,0.12)" },   // amber
+  { fg: "#6AC4D4", bg: "rgba(106,196,212,0.12)" },   // teal
+  { fg: "#D46A9F", bg: "rgba(212,106,159,0.12)" },   // rose
+  { fg: "#84C99B", bg: "rgba(132,201,155,0.12)" },   // mint
+  { fg: "#C99B84", bg: "rgba(201,155,132,0.12)" },   // tan
+];
 
-const getTopicColor = (topic) => TOPIC_COLORS[topic] || { fg: C.textFaint, bg: C.surface };
+// Cache to keep colors stable per category name
+const _catColorCache = {};
+let _catColorIdx = 0;
+
+const getTopicColor = (topic) => {
+  if (!topic || topic === "General") return { fg: C.textFaint, bg: C.surface };
+  if (_catColorCache[topic]) return _catColorCache[topic];
+  _catColorCache[topic] = CATEGORY_PALETTE[_catColorIdx % CATEGORY_PALETTE.length];
+  _catColorIdx++;
+  return _catColorCache[topic];
+};
 
 const F = {
   serif: "'Playfair Display', 'Georgia', serif",
@@ -958,10 +970,32 @@ function PerformanceView() {
   const avgGrade = getGrade(avgEngRate);
   const avgEngDisplay = avgEngRate !== null ? `${avgEngRate.toFixed(1)}%` : "—";
 
+  // Find top category per metric
+  const catMetrics = {};
+  filteredPosts.forEach(p => {
+    const cat = (p.topic_tags || [])[0] || "General";
+    if (!catMetrics[cat]) catMetrics[cat] = { impressions: 0, likes: 0, comments: 0 };
+    catMetrics[cat].impressions += (p.impressions || 0);
+    catMetrics[cat].likes += (p.likes || 0);
+    catMetrics[cat].comments += (p.comments || 0);
+  });
+
+  const topCatFor = (metric) => {
+    let best = null, bestVal = 0;
+    for (const [cat, m] of Object.entries(catMetrics)) {
+      if (m[metric] > bestVal) { bestVal = m[metric]; best = cat; }
+    }
+    return best && bestVal > 0 ? getTopicColor(best).fg : null;
+  };
+
+  const impColor = topCatFor("impressions") || C.gold;
+  const likesColor = topCatFor("likes") || C.purple;
+  const commentsColor = topCatFor("comments") || C.green;
+
   const stats = [
-    { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: C.gold },
-    { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: C.purple },
-    { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: C.green },
+    { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: impColor },
+    { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: likesColor },
+    { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: commentsColor },
     { label: "Engagement", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color },
   ];
 
@@ -1040,7 +1074,7 @@ function PerformanceView() {
           <div key={i} style={{ background: C.elevated, padding: "24px 20px", animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
             <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>{s.label}</p>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: F.serif, fontSize: 30, color: s.value === "—" ? C.textGhost : C.text, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
+              <span style={{ fontFamily: F.serif, fontSize: 30, color: s.value === "—" ? C.textGhost : s.color, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
               {s.grade && s.grade.letter !== "—" && <span style={{ fontFamily: F.mono, fontSize: 16, fontWeight: 600, color: s.grade.color }}>{s.grade.letter}</span>}
             </div>
           </div>
@@ -1130,7 +1164,10 @@ function PerformanceView() {
             return (
               <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{t.name}</span>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: tc.fg, flexShrink: 0 }} />
+                    {t.name}
+                  </span>
                   <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{t.avg} avg · {t.count}</span>
                 </div>
                 <div style={{ height: 4, background: C.stroke, borderRadius: 2, overflow: "hidden" }}>
