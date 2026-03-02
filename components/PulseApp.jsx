@@ -907,13 +907,14 @@ function PerformanceView() {
   // Compute metrics from actual post data
   const totalLikes = posts.reduce((sum, p) => sum + (p.likes || 0), 0);
   const totalComments = posts.reduce((sum, p) => sum + (p.comments || 0), 0);
+  const totalImpressions = posts.reduce((sum, p) => sum + (p.impressions || 0), 0);
   const avgEngagement = posts.length > 0 ? Math.round((totalLikes + totalComments) / posts.length) : 0;
 
   const stats = [
-    { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: C.gold },
-    { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: C.purple },
-    { label: "Avg engagement", value: avgEngagement > 0 ? avgEngagement.toLocaleString() : "—", color: C.green },
-    { label: "Posts tracked", value: posts.length > 0 ? posts.length : "—", color: C.blue },
+    { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: C.gold },
+    { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: C.purple },
+    { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: C.green },
+    { label: "Avg engagement", value: avgEngagement > 0 ? avgEngagement.toLocaleString() : "—", color: C.blue },
   ];
 
   // Comment impact from real data
