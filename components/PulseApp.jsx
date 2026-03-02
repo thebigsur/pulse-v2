@@ -900,15 +900,34 @@ function OutreachView() {
 
 function PerformanceView() {
   const { data: perfData, loading, refetch } = usePerformance();
+  const [period, setPeriod] = useState("all_time");
 
-  const posts = perfData.posts || [];
+  const allPosts = perfData.posts || [];
   const commentCount = perfData.commentCount || 0;
 
-  // Compute metrics from actual post data
-  const totalLikes = posts.reduce((sum, p) => sum + (p.likes || 0), 0);
-  const totalComments = posts.reduce((sum, p) => sum + (p.comments || 0), 0);
-  const totalImpressions = posts.reduce((sum, p) => sum + (p.impressions || 0), 0);
-  const avgEngagement = posts.length > 0 ? Math.round((totalLikes + totalComments) / posts.length) : 0;
+  // Filter posts by selected time period
+  const now = new Date();
+  const filteredPosts = allPosts.filter(p => {
+    if (period === "all_time") return true;
+    if (!p.posted_at) return false;
+    const posted = new Date(p.posted_at);
+    if (period === "yearly") return posted >= new Date(now.getFullYear(), 0, 1);
+    if (period === "monthly") return posted >= new Date(now.getFullYear(), now.getMonth(), 1);
+    if (period === "weekly") {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return posted >= weekAgo;
+    }
+    return true;
+  });
+
+  const postLimit = (period === "all_time" || period === "yearly") ? 20 : 10;
+
+  // Compute metrics from filtered posts
+  const totalLikes = filteredPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
+  const totalComments = filteredPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
+  const totalImpressions = filteredPosts.reduce((sum, p) => sum + (p.impressions || 0), 0);
+  const avgEngagement = filteredPosts.length > 0 ? Math.round((totalLikes + totalComments) / filteredPosts.length) : 0;
 
   const stats = [
     { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: C.gold },
@@ -925,9 +944,9 @@ function PerformanceView() {
     { label: "Connections", value: 0, color: C.green },
   ];
 
-  // Compute topic breakdown from advisor_posts
+  // Compute topic breakdown from filtered posts
   const topicMap = {};
-  posts.forEach(p => {
+  filteredPosts.forEach(p => {
     const tags = p.topic_tags || [];
     const tag = tags[0] || "General";
     if (!topicMap[tag]) topicMap[tag] = { totalLikes: 0, count: 0 };
@@ -950,7 +969,24 @@ function PerformanceView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={posts.length > 0 ? `${posts.length} posts synced from LinkedIn` : "Run Post History Sync in Settings"}>Performance</SectionTitle>
+      <SectionTitle sub={allPosts.length > 0 ? `${allPosts.length} posts synced from LinkedIn` : "Run Post History Sync in Settings"}>Performance</SectionTitle>
+
+      {/* Time period selector */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.elevated, borderRadius: 8, padding: 4, width: "fit-content" }}>
+        {[
+          { key: "all_time", label: "All Time" },
+          { key: "yearly", label: "This Year" },
+          { key: "monthly", label: "This Month" },
+          { key: "weekly", label: "This Week" },
+        ].map(p => (
+          <button key={p.key} onClick={() => setPeriod(p.key)} style={{
+            padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
+            fontSize: 12, fontFamily: F.mono, letterSpacing: "0.02em", transition: "all 0.2s ease",
+            background: period === p.key ? C.gold : "transparent",
+            color: period === p.key ? C.bg : C.textFaint,
+          }}>{p.label}</button>
+        ))}
+      </div>
 
       {/* Metrics cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: C.stroke, borderRadius: 8, overflow: "hidden", marginBottom: 48 }}>
@@ -965,18 +1001,24 @@ function PerformanceView() {
         ))}
       </div>
 
-      {posts.length === 0 && (
+      {filteredPosts.length === 0 && allPosts.length === 0 && (
         <div style={{ padding: "32px 0 48px", textAlign: "center" }}>
           <p style={{ fontSize: 14, color: C.textFaint }}>No posts synced yet. Run Post History Sync in Settings to pull your LinkedIn posts.</p>
+        </div>
+      )}
+
+      {filteredPosts.length === 0 && allPosts.length > 0 && (
+        <div style={{ padding: "32px 0 48px", textAlign: "center" }}>
+          <p style={{ fontSize: 14, color: C.textFaint }}>No posts in this time period.</p>
         </div>
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, marginBottom: 48 }}>
         {/* Top posts */}
         <div>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Top posts</p>
-          {posts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts synced yet. Run Post History Sync in Settings.</p>}
-          {posts.sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, 10).map((p, i) => {
+          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Top posts{filteredPosts.length > 0 ? ` · ${Math.min(filteredPosts.length, postLimit)} of ${filteredPosts.length}` : ""}</p>
+          {filteredPosts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts in this period.</p>}
+          {[...filteredPosts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, postLimit).map((p, i) => {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
