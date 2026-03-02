@@ -24,17 +24,18 @@ export default async function handler(req, res) {
     });
   }
 
-  // POST — log performance for a specific post
+  // POST — update performance fields for a specific post (partial update)
   if (req.method === 'POST') {
     const { post_id, likes, comments, impressions } = req.body;
     if (!post_id) return res.status(400).json({ error: 'post_id required' });
 
-    const { error } = await db.from('advisor_posts').update({
-      likes: likes || 0,
-      comments: comments || 0,
-      impressions: impressions || 0,
-      performance_logged: true,
-    }).eq('id', post_id);
+    const updates = {};
+    if (likes !== undefined) updates.likes = likes;
+    if (comments !== undefined) updates.comments = comments;
+    if (impressions !== undefined) updates.impressions = impressions;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+    const { error } = await db.from('advisor_posts').update(updates).eq('id', post_id);
 
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ success: true });
