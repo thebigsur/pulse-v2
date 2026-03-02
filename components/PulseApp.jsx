@@ -901,22 +901,29 @@ function OutreachView() {
 function PerformanceView() {
   const { data: perfData, loading, refetch } = usePerformance();
   const [period, setPeriod] = useState("all_time");
+  const [editingImp, setEditingImp] = useState(null); // post id being edited
+  const [impValue, setImpValue] = useState("");
+  const [savingImp, setSavingImp] = useState(false);
 
   const allPosts = perfData.posts || [];
   const commentCount = perfData.commentCount || 0;
 
-  // Filter posts by selected time period
+  // Filter posts by selected time period (rolling windows)
   const now = new Date();
   const filteredPosts = allPosts.filter(p => {
     if (period === "all_time") return true;
     if (!p.posted_at) return false;
     const posted = new Date(p.posted_at);
     if (period === "yearly") return posted >= new Date(now.getFullYear(), 0, 1);
-    if (period === "monthly") return posted >= new Date(now.getFullYear(), now.getMonth(), 1);
+    if (period === "monthly") {
+      const thirtyAgo = new Date(now);
+      thirtyAgo.setDate(thirtyAgo.getDate() - 30);
+      return posted >= thirtyAgo;
+    }
     if (period === "weekly") {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      return posted >= weekAgo;
+      const sevenAgo = new Date(now);
+      sevenAgo.setDate(sevenAgo.getDate() - 7);
+      return posted >= sevenAgo;
     }
     return true;
   });
@@ -958,6 +965,23 @@ function PerformanceView() {
   })).sort((a, b) => b.avg - a.avg);
   const maxAvg = topicList.length > 0 ? topicList[0].avg : 1;
 
+  const handleSaveImpressions = async (postId) => {
+    const val = parseInt(impValue);
+    if (isNaN(val) || val < 0) return;
+    setSavingImp(true);
+    try {
+      await fetch("/api/performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_id: postId, impressions: val }),
+      });
+      refetch();
+      setEditingImp(null);
+      setImpValue("");
+    } catch (err) { console.error("Save impressions failed:", err); }
+    setSavingImp(false);
+  };
+
   if (loading) return (
     <div style={{ animation: "enter 0.35s ease" }}>
       <SectionTitle sub="Last 30 days">Performance</SectionTitle>
@@ -976,8 +1000,8 @@ function PerformanceView() {
         {[
           { key: "all_time", label: "All Time" },
           { key: "yearly", label: "This Year" },
-          { key: "monthly", label: "This Month" },
-          { key: "weekly", label: "This Week" },
+          { key: "monthly", label: "Last 30 Days" },
+          { key: "weekly", label: "Last 7 Days" },
         ].map(p => (
           <button key={p.key} onClick={() => setPeriod(p.key)} style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
@@ -1036,7 +1060,34 @@ function PerformanceView() {
                       {p.linkedin_url && <a href={p.linkedin_url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }}><Icons.external /></a>}
                     </div>
                   </div>
-                  <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2, flexShrink: 0 }}>{p.likes || 0} · {p.comments || 0}</p>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                    <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginTop: 2 }}>{p.likes || 0} · {p.comments || 0}</p>
+                    {editingImp === p.id ? (
+                      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                        <input
+                          type="number"
+                          value={impValue}
+                          onChange={e => setImpValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter") handleSaveImpressions(p.id); if (e.key === "Escape") { setEditingImp(null); setImpValue(""); } }}
+                          autoFocus
+                          placeholder="0"
+                          style={{ width: 70, padding: "3px 6px", fontSize: 11, fontFamily: F.mono, background: C.surface, border: `1px solid ${C.gold}`, borderRadius: 4, color: C.text, outline: "none" }}
+                        />
+                        <button onClick={() => handleSaveImpressions(p.id)} disabled={savingImp} style={{ fontSize: 10, fontFamily: F.mono, padding: "3px 8px", borderRadius: 4, border: "none", cursor: "pointer", background: C.gold, color: C.bg }}>{savingImp ? "..." : "Save"}</button>
+                        <button onClick={() => { setEditingImp(null); setImpValue(""); }} style={{ fontSize: 10, fontFamily: F.mono, padding: "3px 6px", borderRadius: 4, border: "none", cursor: "pointer", background: "transparent", color: C.textGhost }}>✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setEditingImp(p.id); setImpValue(String(p.impressions || "")); }} style={{
+                        fontSize: 10, fontFamily: F.mono, padding: "2px 6px", borderRadius: 3, border: `1px solid ${C.stroke}`, cursor: "pointer",
+                        background: "transparent", color: (p.impressions || 0) > 0 ? C.gold : C.textGhost, transition: "all 0.15s ease",
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = C.gold; e.currentTarget.style.color = C.gold; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = C.stroke; e.currentTarget.style.color = (p.impressions || 0) > 0 ? C.gold : C.textGhost; }}
+                      >
+                        {(p.impressions || 0) > 0 ? `${p.impressions.toLocaleString()} imp` : "+ imp"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
