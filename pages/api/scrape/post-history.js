@@ -1,5 +1,5 @@
 // POST /api/scrape/post-history — Sync advisor's own LinkedIn posts
-// Uses harvestapi/linkedin-profile-posts to scrape directly from profile URL
+// Uses harvestapi/linkedin-profile-posts with includeReposts: false
 
 import { createServerClient } from '../../../lib/supabase';
 import { ApifyClient } from 'apify-client';
@@ -7,78 +7,50 @@ import { extractApifyToken, sanitizeText, num } from '../../../lib/utils.js';
 
 export const config = { maxDuration: 300 };
 
-// Parse various date formats from Apify actors
+// Parse date from actor output — postedAt can be object {timestamp, date} or string
 function parsePostDate(item) {
-  if (item.createdAtTimestamp && typeof item.createdAtTimestamp === 'number') {
-    return new Date(item.createdAtTimestamp).toISOString();
+  // Actor returns postedAt as object: { timestamp, date, postedAgoShort, postedAgoText }
+  const pa = item.postedAt;
+  if (pa && typeof pa === 'object') {
+    if (pa.timestamp) return new Date(pa.timestamp).toISOString();
+    if (pa.date) {
+      const d = new Date(pa.date);
+      if (!isNaN(d.getTime())) return d.toISOString();
+    }
+    // Try relative: "2w", "1mo"
+    const rel = pa.postedAgoShort || pa.postedAgoText || '';
+    const match = String(rel).match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min|y|year)/i);
+    if (match) {
+      const val = parseInt(match[1]);
+      const ms = { mo:2592e6, month:2592e6, w:6048e5, week:6048e5, d:864e5, day:864e5, h:36e5, hour:36e5, m:6e4, min:6e4, y:31536e6, year:31536e6 }[match[2].toLowerCase()] || 0;
+      return new Date(Date.now() - val * ms).toISOString();
+    }
   }
-  const raw = item.postedAt || item.publishedAt || item.postedDate || item.createdAt || null;
-  if (!raw) return new Date().toISOString();
-  if (typeof raw === 'number') return new Date(raw).toISOString();
-
-  const parsed = new Date(raw);
-  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 2000) return parsed.toISOString();
-
-  // Relative time: "2w", "3d", "1mo", "5h"
-  const str = String(raw).toLowerCase().trim();
-  const match = str.match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min)/);
-  if (match) {
-    const val = parseInt(match[1]);
-    const ms = { mo: 2592000000, month: 2592000000, w: 604800000, week: 604800000, d: 86400000, day: 86400000, h: 3600000, hour: 3600000, m: 60000, min: 60000 }[match[2]] || 0;
-    return new Date(Date.now() - val * ms).toISOString();
+  // Fallback: postedAt as string or number
+  if (typeof pa === 'number') return new Date(pa).toISOString();
+  if (typeof pa === 'string') {
+    const d = new Date(pa);
+    if (!isNaN(d.getTime()) && d.getFullYear() > 2000) return d.toISOString();
+    const match = pa.match(/(\d+)\s*(mo|month|w|week|d|day|h|hour|m|min|y|year)/i);
+    if (match) {
+      const val = parseInt(match[1]);
+      const ms = { mo:2592e6, month:2592e6, w:6048e5, week:6048e5, d:864e5, day:864e5, h:36e5, hour:36e5, m:6e4, min:6e4, y:31536e6, year:31536e6 }[match[2].toLowerCase()] || 0;
+      return new Date(Date.now() - val * ms).toISOString();
+    }
   }
+  if (item.createdAtTimestamp) return new Date(item.createdAtTimestamp).toISOString();
   return new Date().toISOString();
 }
 
-// Detect if a post is a repost/reshare (not original content)
-function isRepost(item) {
-  // Explicit repost flags from the actor
-  if (item.reshared === true || item.isRepost === true || item.reposted === true) return true;
-  if (item.resharedPost || item.originalPost || item.sharedPost) return true;
-  
-  // If the post has a different author than the profile being scraped
-  // The actor nests the original author in various ways
-  if (item.actor && item.actor.author === false) return true; // actor.author=false means reshared
-  
-  // Check for "reshared" or "reposted" in social metadata
-  if (item.socialContent?.hideShareAction === true && item.socialContent?.hideSendAction === true) {
-    // Some reshared posts have these flags
-  }
-  
-  // Check if commentary is empty but content exists (pure reshare with no comment)
-  // For linkedin-profile-posts actor, reshares often have empty commentary but populated content
-  if (item.commentary === '' && item.content && item.content.length > 0) return true;
-  if (item.commentary === null && item.resharedBy) return true;
-  
-  return false;
-}
-
 export default async function handler(req, res) {
-  // Support both POST (scrape) and PUT/DELETE (edit) 
-  if (req.method === 'PUT') {
-    const db = createServerClient();
-    const { id, ...updates } = req.body;
-    if (!id) return res.status(400).json({ error: 'id required' });
-    const { error } = await db.from('advisor_posts').update(updates).eq('id', id);
-    return error ? res.status(500).json({ error: error.message }) : res.json({ success: true });
-  }
-  if (req.method === 'DELETE') {
-    const db = createServerClient();
-    const { id } = req.body;
-    if (!id) return res.status(400).json({ error: 'id required' });
-    const { error } = await db.from('advisor_posts').delete().eq('id', id);
-    return error ? res.status(500).json({ error: error.message }) : res.json({ success: true });
-  }
-
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (req.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   const db = createServerClient();
-  let totalScraped = 0, totalStored = 0, totalErrors = 0, totalSkippedReposts = 0;
+  let totalScraped = 0, totalStored = 0, totalErrors = 0;
   const errorDetails = [];
-  const diagnostics = {};
 
   const { data: logEntry } = await db.from('scrape_log').insert({
     pipeline: 'post-history', status: 'running', started_at: new Date().toISOString(),
@@ -108,36 +80,23 @@ export default async function handler(req, res) {
       const run = await client.actor('harvestapi/linkedin-profile-posts').call({
         profileUrls: [fullUrl],
         maxPosts: 50,
+        includeReposts: false,  // Actor-level repost filtering
       }, { waitSecs: 120 });
 
       const dataset = await client.dataset(run.defaultDatasetId).listItems({ limit: 50 });
       const items = dataset.items || [];
       totalScraped = items.length;
 
-      // Diagnostic: log first 3 items' keys and repost-related fields
       if (items.length > 0) {
-        diagnostics.firstItemKeys = Object.keys(items[0]);
-        diagnostics.sampleItems = items.slice(0, 3).map(item => ({
-          text: (item.content || item.text || item.commentary || '').substring(0, 50),
-          reshared: item.reshared,
-          isRepost: item.isRepost,
-          contributed: item.contributed,
-          actorAuthor: item.actor?.author,
-          resharedPost: !!item.resharedPost,
-          originalPost: !!item.originalPost,
-          commentary: item.commentary === '' ? '<empty>' : item.commentary === null ? '<null>' : (item.commentary || '').substring(0, 30),
-          numLikes: item.numLikes,
-        }));
+        const first = items[0];
+        console.log(`[Post History] Keys: ${Object.keys(first).join(', ')}`);
+        console.log(`[Post History] postedAt type: ${typeof first.postedAt}, value: ${JSON.stringify(first.postedAt)}`);
+        console.log(`[Post History] engagement keys: ${first.engagement ? Object.keys(first.engagement).join(', ') : 'none'}`);
+        console.log(`[Post History] engagement: ${JSON.stringify(first.engagement)}`);
       }
 
       for (const item of items) {
         try {
-          // Skip reposts
-          if (isRepost(item)) {
-            totalSkippedReposts++;
-            continue;
-          }
-
           const text = sanitizeText(
             item.content || item.text || item.commentary || item.postText || item.title || ''
           );
@@ -150,12 +109,19 @@ export default async function handler(req, res) {
 
           const postedAt = parsePostDate(item);
 
+          // Extract engagement — actor may nest under engagement object or top-level
+          const eng = item.engagement || {};
+          const likes = num(eng.likes, eng.numLikes, item.numLikes, item.likes, 0);
+          const comments = num(eng.comments, eng.numComments, item.numComments, item.comments, 0);
+          const impressions = num(eng.impressions, eng.numImpressions, eng.views, item.numImpressions, item.impressions, 0);
+
           const { error } = await db.from('advisor_posts').upsert({
             post_text: text,
             linkedin_url: postUrl,
             posted_at: postedAt,
-            likes: num(item.numLikes, item.reactionCount, item.engagement?.likes, item.likes, 0),
-            comments: num(item.numComments, item.commentCount, item.engagement?.comments, item.comments, 0),
+            likes,
+            comments,
+            impressions,
             source: 'linkedin_sync',
           }, {
             onConflict: 'linkedin_url',
@@ -169,8 +135,9 @@ export default async function handler(req, res) {
           if (errorDetails.length < 5) errorDetails.push(`item: ${err.message}`);
         }
       }
+
     } else {
-      // Fallback: name search (same as before)
+      // Fallback: name search
       const run = await client.actor('harvestapi/linkedin-post-search').call({
         searchQueries: [advisorName], maxPosts: 30, sortBy: 'date',
       }, { waitSecs: 120 });
@@ -187,11 +154,13 @@ export default async function handler(req, res) {
           if (!text || text.length < 10) continue;
           const postUrl = item.linkedinUrl || item.url || (item.shareUrn ? `https://www.linkedin.com/feed/update/${item.shareUrn}` : '');
           if (!postUrl) continue;
+          const eng = item.engagement || {};
 
           const { error } = await db.from('advisor_posts').upsert({
             post_text: text, linkedin_url: postUrl, posted_at: parsePostDate(item),
-            likes: num(item.engagement?.likes, item.numLikes, 0),
-            comments: num(item.engagement?.comments, item.numComments, 0),
+            likes: num(eng.likes, item.numLikes, 0),
+            comments: num(eng.comments, item.numComments, 0),
+            impressions: num(eng.impressions, item.numImpressions, 0),
             source: 'linkedin_sync',
           }, { onConflict: 'linkedin_url', ignoreDuplicates: false });
 
@@ -201,20 +170,20 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log(`[Post History] Done: ${totalScraped} scraped, ${totalStored} stored, ${totalSkippedReposts} reposts skipped, ${totalErrors} errors`);
+    console.log(`[Post History] Done: ${totalScraped} scraped, ${totalStored} stored, ${totalErrors} errors`);
 
     await db.from('scrape_log').update({
       results_count: totalScraped, scored_count: totalStored, errors_count: totalErrors,
       status: 'completed', completed_at: new Date().toISOString(),
     }).eq('id', logEntry?.id);
 
-    return res.json({ success: true, scraped: totalScraped, stored: totalStored, skippedReposts: totalSkippedReposts, errors: totalErrors, errorDetails, diagnostics });
+    return res.json({ success: true, scraped: totalScraped, stored: totalStored, errors: totalErrors, errorDetails });
   } catch (err) {
     console.error('[Post History] Pipeline error:', err);
     await db.from('scrape_log').update({
       results_count: totalScraped, scored_count: totalStored, errors_count: totalErrors,
       status: 'error', completed_at: new Date().toISOString(),
     }).eq('id', logEntry?.id);
-    return res.status(500).json({ success: false, error: err.message, errorDetails, diagnostics });
+    return res.status(500).json({ success: false, error: err.message, errorDetails });
   }
 }
