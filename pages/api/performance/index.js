@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     // Get recent advisor posts with performance data
     const { data: posts } = await db.from('advisor_posts')
-      .select('*').order('posted_at', { ascending: false }).limit(10);
+      .select('*').order('posted_at', { ascending: false }).limit(100);
 
     // Get latest performance metrics
     const { data: metrics } = await db.from('performance_metrics')
