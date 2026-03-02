@@ -173,33 +173,18 @@ export default async function handler(req, res) {
 
     console.log(`[Post History] Done: ${totalScraped} scraped, ${totalStored} stored, ${totalErrors} errors`);
 
-    // Classify untagged posts using user's categories
+    // Classify all posts using user's categories
     let classified = 0;
     try {
       const categories = JSON.parse(profile?.post_categories || '[]');
       if (categories.length > 0) {
-        // Get posts that haven't been classified yet (topic_tags is null or contains only "General")
-        const { data: untagged } = await db.from('advisor_posts')
+        const { data: allDbPosts } = await db.from('advisor_posts')
           .select('id, post_text, topic_tags')
-          .or('topic_tags.is.null,topic_tags.eq.{}');
+          .order('posted_at', { ascending: false });
 
-        // Also grab posts tagged only as General
-        const { data: generalTagged } = await db.from('advisor_posts')
-          .select('id, post_text, topic_tags')
-          .contains('topic_tags', ['General']);
-
-        const allUntagged = [...(untagged || []), ...(generalTagged || [])];
-        // Deduplicate by id
-        const seen = new Set();
-        const toClassify = allUntagged.filter(p => {
-          if (seen.has(p.id)) return false;
-          seen.add(p.id);
-          return true;
-        });
-
-        if (toClassify.length > 0) {
-          console.log(`[Post History] Classifying ${toClassify.length} posts into categories: ${categories.join(', ')}`);
-          const results = await classifyPosts(toClassify, categories);
+        if (allDbPosts && allDbPosts.length > 0) {
+          console.log(`[Post History] Classifying ${allDbPosts.length} posts into categories: ${categories.join(', ')}`);
+          const results = await classifyPosts(allDbPosts, categories);
           for (const r of results) {
             await db.from('advisor_posts').update({ topic_tags: [r.category] }).eq('id', r.id);
             classified++;
