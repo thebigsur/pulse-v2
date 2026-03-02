@@ -944,21 +944,25 @@ function PerformanceView() {
 
   // Engagement performance score: impressions weighted most, then comments, then likes
   // Score = (impressions × 3) + (comments × 50) + (likes × 10)
-  // Grade is relative to the user's own average performance
+  // Grade is relative to the user's own ALL-TIME average performance
   const getPostScore = (p) => {
     if (!p.impressions || p.impressions <= 0) return null;
     return (p.impressions * 3) + ((p.comments || 0) * 50) + ((p.likes || 0) * 10);
   };
 
-  // Calculate average score across all posts with impressions for grading baseline
-  const scoredPosts = filteredPosts.filter(p => (p.impressions || 0) > 0);
-  const avgScore = scoredPosts.length > 0
-    ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
+  // ALL-TIME baseline for grading (always compare against full history)
+  const allScoredPosts = allPosts.filter(p => (p.impressions || 0) > 0);
+  const allTimeAvgScore = allScoredPosts.length > 0
+    ? allScoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / allScoredPosts.length
     : 0;
 
+  // Period-specific scored posts
+  const scoredPosts = filteredPosts.filter(p => (p.impressions || 0) > 0);
+
+  // Individual post grades compare against all-time average
   const getGrade = (score) => {
-    if (score === null || avgScore === 0) return { letter: "—", color: C.textGhost };
-    const ratio = score / avgScore;
+    if (score === null || allTimeAvgScore === 0) return { letter: "—", color: C.textGhost };
+    const ratio = score / allTimeAvgScore;
     if (ratio >= 2.0) return { letter: "A+", color: "#4ade80" };
     if (ratio >= 1.4) return { letter: "A", color: "#86efac" };
     if (ratio >= 0.8) return { letter: "B", color: C.gold };
@@ -966,12 +970,12 @@ function PerformanceView() {
     return { letter: "D", color: "#f87171" };
   };
 
-  // Aggregate: average score across posts with impressions, graded against itself
-  const totalScore = scoredPosts.length > 0
+  // Aggregate: period average graded against all-time average
+  const periodAvgScore = scoredPosts.length > 0
     ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
     : null;
-  const avgGrade = totalScore !== null ? getGrade(totalScore) : { letter: "—", color: C.textGhost };
-  const avgEngDisplay = totalScore !== null ? Math.round(totalScore).toLocaleString() : "—";
+  const avgGrade = periodAvgScore !== null ? getGrade(periodAvgScore) : { letter: "—", color: C.textGhost };
+  const avgEngDisplay = periodAvgScore !== null ? Math.round(periodAvgScore).toLocaleString() : "—";
   const totalLikes = filteredPosts.reduce((sum, p) => sum + (p.likes || 0), 0);
   const totalComments = filteredPosts.reduce((sum, p) => sum + (p.comments || 0), 0);
   const totalImpressions = filteredPosts.reduce((sum, p) => sum + (p.impressions || 0), 0);
@@ -1002,7 +1006,7 @@ function PerformanceView() {
     { label: "Impressions", value: totalImpressions > 0 ? totalImpressions.toLocaleString() : "—", color: impColor },
     { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: likesColor },
     { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: commentsColor },
-    { label: "Perf. score", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color },
+    { label: "Engagement Score", value: avgEngDisplay, grade: avgGrade, color: avgGrade.color, featured: true },
   ];
 
   // Comment impact from real data
@@ -1077,11 +1081,16 @@ function PerformanceView() {
       {/* Metrics cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: C.stroke, borderRadius: 8, overflow: "hidden", marginBottom: 48 }}>
         {stats.map((s, i) => (
-          <div key={i} style={{ background: C.elevated, padding: "24px 20px", animation: `fadeIn 0.3s ease ${i * 0.06}s both` }}>
-            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>{s.label}</p>
+          <div key={i} style={{
+            background: s.featured ? `linear-gradient(135deg, ${C.elevated} 0%, rgba(212,175,55,0.08) 100%)` : C.elevated,
+            padding: s.featured ? "24px 20px 24px 20px" : "24px 20px",
+            animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
+            borderTop: s.featured ? `2px solid ${avgGrade.color || C.gold}` : "2px solid transparent",
+          }}>
+            <p style={{ fontSize: 10, fontFamily: F.mono, color: s.featured ? (avgGrade.color || C.gold) : C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12, fontWeight: s.featured ? 600 : 400 }}>{s.label}</p>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span style={{ fontFamily: F.serif, fontSize: 30, color: s.value === "—" ? C.textGhost : s.color, fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
-              {s.grade && s.grade.letter !== "—" && <span style={{ fontFamily: F.mono, fontSize: 16, fontWeight: 600, color: s.grade.color }}>{s.grade.letter}</span>}
+              {s.grade && s.grade.letter !== "—" && <span style={{ fontFamily: F.serif, fontSize: s.featured ? 36 : 16, fontWeight: s.featured ? 500 : 600, color: s.grade.color }}>{s.grade.letter}</span>}
+              <span style={{ fontFamily: s.featured ? F.mono : F.serif, fontSize: s.featured ? 14 : 30, color: s.value === "—" ? C.textGhost : (s.featured ? C.textFaint : s.color), fontWeight: 400, letterSpacing: "-0.02em" }}>{s.value}</span>
             </div>
           </div>
         ))}
