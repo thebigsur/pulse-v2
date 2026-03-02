@@ -949,7 +949,11 @@ function PerformanceView() {
     if (period === "all_time") return true;
     if (!p.posted_at) return false;
     const posted = new Date(p.posted_at);
-    if (period === "yearly") return posted >= new Date(now.getFullYear(), 0, 1);
+    if (period === "yearly") {
+      const yearAgo = new Date(now);
+      yearAgo.setDate(yearAgo.getDate() - 365);
+      return posted >= yearAgo;
+    }
     if (period === "monthly") {
       const thirtyAgo = new Date(now);
       thirtyAgo.setDate(thirtyAgo.getDate() - 30);
@@ -967,33 +971,37 @@ function PerformanceView() {
 
   // Engagement performance score: impressions weighted most, then comments, then likes
   // Score = (impressions × 3) + (comments × 50) + (likes × 10)
-  // Grade is relative to the user's own ALL-TIME average performance
+  // Grade is relative to the user's own ALL-TIME median performance
   const getPostScore = (p) => {
     if (!p.impressions || p.impressions <= 0) return null;
     return (p.impressions * 3) + ((p.comments || 0) * 50) + ((p.likes || 0) * 10);
   };
 
-  // ALL-TIME baseline for grading (always compare against full history)
+  // ALL-TIME median baseline for grading (median resists outliers, so mean vs median reveals skew)
   const allScoredPosts = allPosts.filter(p => (p.impressions || 0) > 0);
-  const allTimeAvgScore = allScoredPosts.length > 0
-    ? allScoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / allScoredPosts.length
+  const allTimeScores = allScoredPosts.map(p => getPostScore(p)).sort((a, b) => a - b);
+  const allTimeMedian = allTimeScores.length > 0
+    ? (allTimeScores.length % 2 === 0
+      ? (allTimeScores[allTimeScores.length / 2 - 1] + allTimeScores[allTimeScores.length / 2]) / 2
+      : allTimeScores[Math.floor(allTimeScores.length / 2)])
     : 0;
 
   // Period-specific scored posts
   const scoredPosts = filteredPosts.filter(p => (p.impressions || 0) > 0);
 
-  // Individual post grades compare against all-time average
+  // Grades compare against all-time median
+  // If your period average > median, you're outperforming your typical post
   const getGrade = (score) => {
-    if (score === null || allTimeAvgScore === 0) return { letter: "—", color: C.textGhost };
-    const ratio = score / allTimeAvgScore;
-    if (ratio >= 2.0) return { letter: "A+", color: "#4ade80" };
-    if (ratio >= 1.4) return { letter: "A", color: "#86efac" };
-    if (ratio >= 0.8) return { letter: "B", color: C.gold };
+    if (score === null || allTimeMedian === 0) return { letter: "—", color: C.textGhost };
+    const ratio = score / allTimeMedian;
+    if (ratio >= 2.5) return { letter: "A+", color: "#4ade80" };
+    if (ratio >= 1.6) return { letter: "A", color: "#86efac" };
+    if (ratio >= 0.85) return { letter: "B", color: C.gold };
     if (ratio >= 0.4) return { letter: "C", color: "#fbbf24" };
     return { letter: "D", color: "#f87171" };
   };
 
-  // Aggregate: period average graded against all-time average
+  // Aggregate: period average graded against all-time median
   const periodAvgScore = scoredPosts.length > 0
     ? scoredPosts.reduce((sum, p) => sum + getPostScore(p), 0) / scoredPosts.length
     : null;
@@ -1088,7 +1096,7 @@ function PerformanceView() {
       <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.elevated, borderRadius: 8, padding: 4, width: "fit-content" }}>
         {[
           { key: "all_time", label: "All Time" },
-          { key: "yearly", label: "This Year" },
+          { key: "yearly", label: "Last Year" },
           { key: "monthly", label: "Last 30 Days" },
           { key: "weekly", label: "Last 7 Days" },
         ].map(p => (
