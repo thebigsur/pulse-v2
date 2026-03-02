@@ -902,33 +902,26 @@ function PerformanceView() {
   const { data: perfData, loading, refetch } = usePerformance();
 
   const posts = perfData.posts || [];
-  const metrics = perfData.metrics || [];
   const commentCount = perfData.commentCount || 0;
 
-  // Build stats from latest metrics period, or show zeros
-  const latest = metrics[0] || {};
-  const prev = metrics[1] || {};
-  const delta = (cur, pre) => {
-    if (!pre || !cur) return "";
-    const diff = cur - pre;
-    if (diff === 0) return "";
-    const pct = pre > 0 ? Math.round((diff / pre) * 100) : 0;
-    return diff > 0 ? `+${pct}%` : `${pct}%`;
-  };
+  // Compute metrics from actual post data
+  const totalLikes = posts.reduce((sum, p) => sum + (p.likes || 0), 0);
+  const totalComments = posts.reduce((sum, p) => sum + (p.comments || 0), 0);
+  const avgEngagement = posts.length > 0 ? Math.round((totalLikes + totalComments) / posts.length) : 0;
 
   const stats = [
-    { label: "Impressions", value: latest.impressions ? latest.impressions.toLocaleString() : "—", delta: delta(latest.impressions, prev.impressions), color: C.gold },
-    { label: "Profile views", value: latest.profile_views ? latest.profile_views.toLocaleString() : "—", delta: delta(latest.profile_views, prev.profile_views), color: C.purple },
-    { label: "New followers", value: latest.new_followers ? `+${latest.new_followers}` : "—", delta: delta(latest.new_followers, prev.new_followers), color: C.green },
-    { label: "Engagement", value: latest.engagement_rate ? `${latest.engagement_rate}%` : "—", delta: delta(latest.engagement_rate, prev.engagement_rate), color: C.blue },
+    { label: "Total likes", value: totalLikes > 0 ? totalLikes.toLocaleString() : "—", color: C.gold },
+    { label: "Total comments", value: totalComments > 0 ? totalComments.toLocaleString() : "—", color: C.purple },
+    { label: "Avg engagement", value: avgEngagement > 0 ? avgEngagement.toLocaleString() : "—", color: C.green },
+    { label: "Posts tracked", value: posts.length > 0 ? posts.length : "—", color: C.blue },
   ];
 
   // Comment impact from real data
   const commentImpact = [
     { label: "Total", value: commentCount, color: C.gold },
-    { label: "Replies", value: latest.replies_received || 0, color: C.blue },
-    { label: "Profile clicks", value: latest.profile_clicks_from_comments || 0, color: C.purple },
-    { label: "Connections", value: latest.new_connections || 0, color: C.green },
+    { label: "Replies", value: 0, color: C.blue },
+    { label: "Profile clicks", value: 0, color: C.purple },
+    { label: "Connections", value: 0, color: C.green },
   ];
 
   // Compute topic breakdown from advisor_posts
@@ -956,7 +949,7 @@ function PerformanceView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={metrics.length > 0 ? `Last 30 days · ${posts.length} posts tracked` : "Start logging to see trends"}>Performance</SectionTitle>
+      <SectionTitle sub={posts.length > 0 ? `${posts.length} posts synced from LinkedIn` : "Run Post History Sync in Settings"}>Performance</SectionTitle>
 
       {/* Metrics cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: C.stroke, borderRadius: 8, overflow: "hidden", marginBottom: 48 }}>
@@ -971,9 +964,9 @@ function PerformanceView() {
         ))}
       </div>
 
-      {metrics.length === 0 && posts.length === 0 && (
+      {posts.length === 0 && (
         <div style={{ padding: "32px 0 48px", textAlign: "center" }}>
-          <p style={{ fontSize: 14, color: C.textFaint }}>No performance data yet. Log post engagement below to start tracking, or add weekly metrics in Supabase.</p>
+          <p style={{ fontSize: 14, color: C.textFaint }}>No posts synced yet. Run Post History Sync in Settings to pull your LinkedIn posts.</p>
         </div>
       )}
 
