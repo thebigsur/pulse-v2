@@ -1306,16 +1306,11 @@ function PostCategoriesForm({ profile, updateField, onSave, saving, saved }) {
     try {
       // First save the current categories
       await onSave();
-      // Then re-run post history sync which will re-classify
-      const res = await fetch("/api/scrape/post-history", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${window.__CRON_SECRET || ""}` },
-      });
-      // Fallback: use the run-pipeline endpoint
+      // Then run post history sync which will re-classify
       const pipeRes = await fetch("/api/run-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pipeline: "post-history" }),
+        body: JSON.stringify({ type: "post-history" }),
       });
       const data = await pipeRes.json();
       setReclassResult(`Done — ${data.classified || 0} posts classified`);
