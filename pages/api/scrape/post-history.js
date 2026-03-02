@@ -4,6 +4,7 @@
 import { createServerClient } from '../../../lib/supabase';
 import { ApifyClient } from 'apify-client';
 import { extractApifyToken, sanitizeText, num } from '../../../lib/utils.js';
+import { classifyPosts } from '../../../lib/ai.js';
 
 export const config = { maxDuration: 300 };
 
@@ -172,12 +173,50 @@ export default async function handler(req, res) {
 
     console.log(`[Post History] Done: ${totalScraped} scraped, ${totalStored} stored, ${totalErrors} errors`);
 
+    // Classify untagged posts using user's categories
+    let classified = 0;
+    try {
+      const categories = JSON.parse(profile?.post_categories || '[]');
+      if (categories.length > 0) {
+        // Get posts that haven't been classified yet (topic_tags is null or contains only "General")
+        const { data: untagged } = await db.from('advisor_posts')
+          .select('id, post_text, topic_tags')
+          .or('topic_tags.is.null,topic_tags.eq.{}');
+
+        // Also grab posts tagged only as General
+        const { data: generalTagged } = await db.from('advisor_posts')
+          .select('id, post_text, topic_tags')
+          .contains('topic_tags', ['General']);
+
+        const allUntagged = [...(untagged || []), ...(generalTagged || [])];
+        // Deduplicate by id
+        const seen = new Set();
+        const toClassify = allUntagged.filter(p => {
+          if (seen.has(p.id)) return false;
+          seen.add(p.id);
+          return true;
+        });
+
+        if (toClassify.length > 0) {
+          console.log(`[Post History] Classifying ${toClassify.length} posts into categories: ${categories.join(', ')}`);
+          const results = await classifyPosts(toClassify, categories);
+          for (const r of results) {
+            await db.from('advisor_posts').update({ topic_tags: [r.category] }).eq('id', r.id);
+            classified++;
+          }
+          console.log(`[Post History] Classified ${classified} posts`);
+        }
+      }
+    } catch (classErr) {
+      console.error('[Post History] Classification error:', classErr.message);
+    }
+
     await db.from('scrape_log').update({
       results_count: totalScraped, scored_count: totalStored, errors_count: totalErrors,
       status: 'completed', completed_at: new Date().toISOString(),
     }).eq('id', logEntry?.id);
 
-    return res.json({ success: true, scraped: totalScraped, stored: totalStored, errors: totalErrors, errorDetails });
+    return res.json({ success: true, scraped: totalScraped, stored: totalStored, classified, errors: totalErrors, errorDetails });
   } catch (err) {
     console.error('[Post History] Pipeline error:', err);
     await db.from('scrape_log').update({
