@@ -251,7 +251,7 @@ function mapApiDraft(item) {
 
 function PostsView() {
   const { drafts: rawDrafts, loading, approve: apiApprove, skip: apiSkip } = useDrafts();
-  const { data: perfData } = usePerformance();
+  const { data: perfData, refetch: refetchPerf } = usePerformance();
   const [showSource, setShowSource] = useState({});
   const [showHistory, setShowHistory] = useState(false);
   const [copied, setCopied] = useState({});
@@ -259,6 +259,14 @@ function PostsView() {
 
   // Save-to-history state
   const [savePanel, setSavePanel] = useState({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false });
+
+  // Edit/delete state for post history
+  const [editingPost, setEditingPost] = useState(null);
+  const [editText, setEditText] = useState("");
+  const [editLikes, setEditLikes] = useState("");
+  const [editComments, setEditComments] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const postHistory = (perfData.posts || []).map(p => ({
     id: p.id,
@@ -316,6 +324,7 @@ function PostsView() {
         }),
       });
       setSavePanel(s => ({ ...s, saving: false, saved: true }));
+      refetchPerf?.();
       setTimeout(() => setSavePanel({ open: false, text: "", topicTags: [], hookType: null, saving: false, saved: false }), 1500);
     } catch (err) {
       console.error('Save to history failed:', err);
@@ -334,6 +343,45 @@ function PostsView() {
   const [showPaste, setShowPaste] = useState(false);
   const openManualPaste = () => {
     setSavePanel({ open: true, text: "", topicTags: [], hookType: null, saving: false, saved: false });
+  };
+
+  const handleEditPost = (p) => {
+    setEditingPost(p.id);
+    setEditText(perfData.posts?.find(x => x.id === p.id)?.post_text || p.text);
+    setEditLikes(String(p.likes || 0));
+    setEditComments(String(p.comments || 0));
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPost) return;
+    setEditSaving(true);
+    try {
+      await fetch('/api/post-history', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingPost,
+          post_text: editText,
+          likes: parseInt(editLikes) || 0,
+          comments: parseInt(editComments) || 0,
+        }),
+      });
+      refetchPerf?.();
+      setEditingPost(null);
+    } catch (err) { console.error('Edit failed:', err); }
+    setEditSaving(false);
+  };
+
+  const handleDeletePost = async (id) => {
+    try {
+      await fetch('/api/post-history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      refetchPerf?.();
+      setConfirmDelete(null);
+    } catch (err) { console.error('Delete failed:', err); }
   };
 
   return (
@@ -593,18 +641,69 @@ function PostsView() {
                 <p style={{ fontSize: 13, color: C.textGhost, padding: "12px 0" }}>No posts saved yet. Approve a draft and save it to start building history.</p>
               )}
               {postHistory.map(p => (
-                <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
-                  <div style={{ padding: "12px 8px", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px" }}
-                    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <span style={{ fontSize: 13, color: C.textSoft, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginRight: 16 }}>{p.text}</span>
-                    <div style={{ display: "flex", gap: 14, flexShrink: 0, alignItems: "center" }}>
-                      <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.date}</span>
-                      <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{p.likes} · {p.comments}</span>
-                      <span style={{ color: C.textGhost, display: "flex" }}><Icons.external /></span>
+                <div key={p.id} style={{ borderBottom: `1px solid ${C.stroke}` }}>
+                  {editingPost === p.id ? (
+                    <div style={{ padding: "12px 8px", margin: "0 -8px", animation: "fadeIn 0.2s ease" }}>
+                      <textarea
+                        value={editText}
+                        onChange={e => setEditText(e.target.value)}
+                        rows={4}
+                        style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.gold}`, color: C.text, fontSize: 13, fontFamily: F.sans, padding: "6px 0", lineHeight: 1.5, resize: "vertical" }}
+                      />
+                      <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Likes</span>
+                          <input value={editLikes} onChange={e => setEditLikes(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Comments</span>
+                          <input value={editComments} onChange={e => setEditComments(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
+                        </div>
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                          <Btn primary onClick={handleSaveEdit} style={{ padding: "4px 12px", fontSize: 11 }}>
+                            {editSaving ? "Saving..." : "Save"}
+                          </Btn>
+                          <Btn ghost onClick={() => setEditingPost(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </a>
+                  ) : confirmDelete === p.id ? (
+                    <div style={{ padding: "12px 8px", margin: "0 -8px", display: "flex", alignItems: "center", justifyContent: "space-between", animation: "fadeIn 0.15s ease" }}>
+                      <span style={{ fontSize: 12, color: C.coral }}>Delete this post?</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <Btn onClick={() => handleDeletePost(p.id)} style={{ padding: "4px 12px", fontSize: 11, background: C.coral, color: "#fff", border: "none" }}>Delete</Btn>
+                        <Btn ghost onClick={() => setConfirmDelete(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: "12px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px", position: "relative" }}
+                      onMouseEnter={e => { e.currentTarget.style.background = C.surfaceHover; e.currentTarget.querySelector('.ph-actions').style.opacity = 1; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.querySelector('.ph-actions').style.opacity = 0; }}>
+                      <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", flex: 1, overflow: "hidden", marginRight: 12 }}>
+                        <span style={{ fontSize: 13, color: C.textSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{p.text}</span>
+                      </a>
+                      <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
+                        <div className="ph-actions" style={{ display: "flex", gap: 4, opacity: 0, transition: "opacity 0.15s" }}>
+                          <button onClick={(e) => { e.stopPropagation(); handleEditPost(p); }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
+                            onMouseEnter={e => e.currentTarget.style.color = C.gold}
+                            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>
+                            edit
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id); }}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
+                            onMouseEnter={e => e.currentTarget.style.color = C.coral}
+                            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>
+                            ×
+                          </button>
+                        </div>
+                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.date}</span>
+                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{p.likes} · {p.comments}</span>
+                        {p.url && p.url !== "#" && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }} onClick={e => e.stopPropagation()}><Icons.external /></a>}
+                      </div>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
