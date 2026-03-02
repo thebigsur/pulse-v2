@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════
 
 import { createServerClient } from '../../../lib/supabase';
-import { scrapeLinkedInContent, scrapeTwitterContent, scrapeTikTokContent } from '../../../lib/scraper';
+import { scrapeLinkedInContent, scrapeTwitterContent } from '../../../lib/scraper';
 import { scoreContent, generateDraft } from '../../../lib/ai';
 
 export const config = {
@@ -46,12 +46,11 @@ export default async function handler(req, res) {
     console.log(`Running with ${keywords.length}/${allKeywords.length} keywords:`, keywords);
 
     // 2. Scrape all platforms
-    const [linkedin, twitter, tiktok] = await Promise.all([
+    const [linkedin, twitter] = await Promise.all([
       scrapeLinkedInContent(keywords),
       scrapeTwitterContent(keywords),
-      scrapeTikTokContent(keywords),
     ]);
-    const allPosts = [...linkedin, ...twitter, ...tiktok];
+    const allPosts = [...linkedin, ...twitter];
     totalScraped = allPosts.length;
 
     // 3. Upsert scraped posts (deduplicate)
