@@ -917,6 +917,7 @@ function PerformanceView() {
   const [impValue, setImpValue] = useState("");
   const [savingImp, setSavingImp] = useState(false);
   const [editingCat, setEditingCat] = useState(null); // post id with open category dropdown
+  const [selectedTopic, setSelectedTopic] = useState(null); // clicked topic filter
 
   const allPosts = perfData.posts || [];
   const commentCount = perfData.commentCount || 0;
@@ -1071,6 +1072,31 @@ function PerformanceView() {
   })).sort((a, b) => b.convRate - a.convRate);
   const maxConvRate = topicList.length > 0 ? Math.max(...topicList.map(t => t.convRate), 1) : 1;
 
+  // Compute insight sentence from the data
+  const insightSentence = (() => {
+    const withConv = topicList.filter(t => t.convRate > 0 && t.count >= 1);
+    if (withConv.length < 2) return null;
+    const best = withConv[0];
+    const bestTc = getTopicColor(best.name);
+    // Find the topic with highest reach that isn't the best conv rate
+    const highReach = [...topicList].sort((a, b) => b.avgImpressions - a.avgImpressions)[0];
+    
+    if (best.name === highReach?.name) {
+      // Same topic dominates both — note it
+      const second = withConv[1];
+      if (!second) return null;
+      const ratio = best.convRate > 0 && second.convRate > 0 ? (best.convRate / second.convRate).toFixed(1) : null;
+      return ratio && parseFloat(ratio) > 1.2 
+        ? { text: `${best.name} leads in both reach and conversations — ${ratio}× the conversion rate of ${second.name}.`, color: bestTc.fg }
+        : { text: `${best.name} has the highest conversation rate at ${best.convRate} comments per 1K impressions.`, color: bestTc.fg };
+    } else if (highReach && highReach.avgImpressions > 0) {
+      // Different topics — interesting tension
+      const reachTc = getTopicColor(highReach.name);
+      return { text: `${best.name} converts ${best.convRate}× per 1K imp — your best for starting conversations. ${highReach.name} gets the most eyeballs (${highReach.avgImpressions >= 1000 ? (highReach.avgImpressions/1000).toFixed(1)+'K' : highReach.avgImpressions} avg imp) but fewer engage.`, color: bestTc.fg };
+    }
+    return { text: `${best.name} has your highest conversation rate at ${best.convRate} comments per 1K impressions.`, color: bestTc.fg };
+  })();
+
   const handleSaveImpressions = async (postId) => {
     const val = parseInt(impValue);
     if (isNaN(val) || val < 0) return;
@@ -1109,7 +1135,7 @@ function PerformanceView() {
           { key: "monthly", label: "Last 30 Days" },
           { key: "weekly", label: "Last 7 Days" },
         ].map(p => (
-          <button key={p.key} onClick={() => setPeriod(p.key)} style={{
+          <button key={p.key} onClick={() => { setPeriod(p.key); setSelectedTopic(null); }} style={{
             padding: "8px 16px", borderRadius: 6, border: "none", cursor: "pointer",
             fontSize: 12, fontFamily: F.mono, letterSpacing: "0.02em", transition: "all 0.2s ease",
             background: period === p.key ? C.gold : "transparent",
@@ -1148,10 +1174,30 @@ function PerformanceView() {
         </div>
       )}
 
+      {/* Insight */}
+      {insightSentence && (
+        <div style={{ marginBottom: 24, padding: "12px 16px", background: C.elevated, borderRadius: 8, borderLeft: `3px solid ${insightSentence.color}` }}>
+          <p style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.5 }}>{insightSentence.text}</p>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, marginBottom: 48 }}>
         {/* Top posts */}
         <div>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Top posts{filteredPosts.length > 0 ? ` · ${Math.min(filteredPosts.length, postLimit)} of ${filteredPosts.length}` : ""}</p>
+          {selectedTopic ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <button onClick={() => setSelectedTopic(null)} style={{
+                border: "none", background: "transparent", cursor: "pointer", color: C.textGhost, fontSize: 14, padding: "2px 4px",
+                display: "flex", alignItems: "center", transition: "color 0.15s",
+              }} onMouseEnter={e => e.currentTarget.style.color = C.text} onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>←</button>
+              <Tag color={getTopicColor(selectedTopic).fg} bg={getTopicColor(selectedTopic).bg}>{selectedTopic}</Tag>
+              <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>
+                {filteredPosts.filter(p => ((p.topic_tags || [])[0] || "General") === selectedTopic).length} posts
+              </span>
+            </div>
+          ) : (
+            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Top posts{filteredPosts.length > 0 ? ` · ${Math.min(filteredPosts.length, postLimit)} of ${filteredPosts.length}` : ""}</p>
+          )}
           {filteredPosts.length > 0 && (
             <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
               <div style={{ display: "flex", gap: 4, alignItems: "center" }}><span style={{ width: 8, height: 3, borderRadius: 1, background: C.gold }} /><span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost }}>Reach</span></div>
@@ -1160,7 +1206,12 @@ function PerformanceView() {
             </div>
           )}
           {filteredPosts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts in this period.</p>}
-          {[...filteredPosts].sort((a, b) => (getPostScore(b) || 0) - (getPostScore(a) || 0)).slice(0, postLimit).map((p, i) => {
+          {(() => {
+            const displayPosts = selectedTopic
+              ? filteredPosts.filter(p => ((p.topic_tags || [])[0] || "General") === selectedTopic)
+              : filteredPosts;
+            const limit = selectedTopic ? 50 : postLimit;
+            return [...displayPosts].sort((a, b) => (getPostScore(b) || 0) - (getPostScore(a) || 0)).slice(0, limit).map((p, i) => {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
@@ -1273,13 +1324,11 @@ function PerformanceView() {
                 </div>
               </div>
             );
-          })}
+          }); })()}
         </div>
-
-        {/* Topics breakdown */}
         <div>
           <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>By topic</p>
-          <p style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, marginBottom: 16 }}>Sorted by conversation rate (comments per 1K impressions)</p>
+          <p style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, marginBottom: 16 }}>Sorted by conversation rate · click to view posts</p>
           {topicList.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>Topics appear as you log posts.</p>}
           {/* Column headers */}
           {topicList.length > 0 && (
@@ -1292,10 +1341,20 @@ function PerformanceView() {
           {topicList.map((t, i) => {
             const tc = getTopicColor(t.name);
             const barPct = maxConvRate > 0 ? (t.convRate / maxConvRate) * 100 : 0;
+            const isSelected = selectedTopic === t.name;
             return (
-              <div key={i} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both` }}>
+              <div key={i}
+                onClick={() => setSelectedTopic(isSelected ? null : t.name)}
+                style={{
+                  padding: "10px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both`,
+                  cursor: "pointer", borderRadius: 4, margin: "0 -8px", transition: "all 0.15s",
+                  background: isSelected ? C.surfaceHover : "transparent",
+                  borderLeft: isSelected ? `3px solid ${tc.fg}` : "3px solid transparent",
+                }}
+                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = C.surfaceHover; }}
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, color: C.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, color: isSelected ? C.text : C.textSoft, fontWeight: isSelected ? 600 : 500, display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: tc.fg, flexShrink: 0 }} />
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
                     <span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, flexShrink: 0 }}>×{t.count}</span>
