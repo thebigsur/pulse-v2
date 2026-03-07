@@ -280,6 +280,11 @@ function PostsView() {
   const [editSaving, setEditSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  // "Not for me" feedback state
+  const [notForMeId, setNotForMeId] = useState(null);
+  const [notForMeReason, setNotForMeReason] = useState("");
+  const [notForMeSaving, setNotForMeSaving] = useState(false);
+
   const postHistory = (perfData.posts || []).map(p => ({
     id: p.id,
     text: (p.post_text || "").substring(0, 80),
@@ -353,6 +358,32 @@ function PostsView() {
       refetchPerf?.();
       setConfirmDelete(null);
     } catch (err) { console.error('Delete failed:', err); }
+  };
+
+  const handleNotForMe = async () => {
+    if (!notForMeReason.trim() || !notForMeId) return;
+    setNotForMeSaving(true);
+    try {
+      // 1. Fetch current filters from profile
+      const profileRes = await fetch('/api/profile');
+      const profileData = await profileRes.json();
+      const existing = (profileData.content_filters || '').trim();
+      const updated = existing ? `${existing}\n${notForMeReason.trim()}` : notForMeReason.trim();
+
+      // 2. Save updated filters to profile
+      await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_filters: updated }),
+      });
+
+      // 3. Skip the draft
+      await apiSkip(notForMeId);
+
+      setNotForMeId(null);
+      setNotForMeReason("");
+    } catch (err) { console.error('Not for me failed:', err); }
+    setNotForMeSaving(false);
   };
 
   return (
@@ -483,14 +514,25 @@ function PostsView() {
                           </div>
                         )}
 
-                        {/* Actions: Approve + Skip */}
-                        <div style={{ display: "flex", gap: 10 }}>
+                        {/* Actions: Approve + Skip + Not for me */}
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                           <Btn primary onClick={(e) => { e.stopPropagation(); handleApprove(draft); }}>
                             <Icons.check /> Approve
                           </Btn>
                           <Btn onClick={(e) => { e.stopPropagation(); handleSkip(draft.id); }}>
                             Skip
                           </Btn>
+                          <button onClick={(e) => { e.stopPropagation(); setNotForMeId(draft.id); setNotForMeReason(""); }}
+                            style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: C.textGhost, fontSize: 11, fontFamily: F.mono,
+                              padding: "6px 0", transition: "color 0.15s", marginLeft: 4,
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.color = C.coral}
+                            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
+                          >
+                            Not for me
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -641,6 +683,47 @@ function PostsView() {
             </div>
           )}
         </div>
+
+      {/* "Not for me" modal overlay */}
+      {notForMeId && (
+        <div onClick={() => { setNotForMeId(null); setNotForMeReason(""); }} style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.6)", zIndex: 9999,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: "#242428", borderRadius: 12, padding: "28px 28px 24px",
+            width: 420, maxWidth: "90vw", border: "1px solid rgba(255,255,255,0.1)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+          }}>
+            <p style={{ fontFamily: F.serif, fontSize: 20, color: C.text, marginBottom: 6 }}>Not for me</p>
+            <p style={{ fontSize: 13, color: C.textFaint, marginBottom: 20, lineHeight: 1.5 }}>
+              Describe what to avoid so future drafts skip content like this. This gets saved to your profile permanently.
+            </p>
+            <textarea
+              autoFocus
+              value={notForMeReason}
+              onChange={e => setNotForMeReason(e.target.value)}
+              placeholder="e.g. Don't suggest posts about tax laws from other countries — only US tax content"
+              rows={3}
+              style={{
+                width: "100%", background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 8,
+                color: C.text, padding: "12px 14px", fontSize: 14, fontFamily: F.sans,
+                lineHeight: 1.5, resize: "vertical", outline: "none",
+              }}
+              onFocus={e => e.target.style.borderColor = C.gold}
+              onBlur={e => e.target.style.borderColor = C.stroke}
+            />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+              <Btn onClick={() => { setNotForMeId(null); setNotForMeReason(""); }}>Cancel</Btn>
+              <Btn primary onClick={handleNotForMe} style={{ opacity: notForMeReason.trim() ? 1 : 0.4, pointerEvents: notForMeReason.trim() ? "auto" : "none" }}>
+                {notForMeSaving ? "Saving..." : "Save & Skip"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
       </>}
     </div>
   );
