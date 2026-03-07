@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useDrafts, useComments, useOutreach, usePerformance } from "../lib/hooks";
+import { createBrowserClient } from "../lib/supabase";
 
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
@@ -2165,7 +2166,83 @@ function SettingsView() {
 const RAIL_COLLAPSED = 60;
 const RAIL_EXPANDED = 180;
 
-function Rail({ view, setView }) {
+// ═══════════════════════════════════════════
+// AUTH SCREEN
+// ═══════════════════════════════════════════
+
+function AuthScreen({ onAuth }) {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function handleSubmit() {
+    setError(""); setSuccess("");
+    if (!email.trim() || !password.trim()) { setError("Email and password are required."); return; }
+    setLoading(true);
+    const supabase = createBrowserClient();
+    if (mode === "signin") {
+      const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (err) { setError(err.message); setLoading(false); return; }
+      onAuth(data.session);
+    } else {
+      const { data, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
+      if (err) { setError(err.message); setLoading(false); return; }
+      if (data.session) { onAuth(data.session); }
+      else { setSuccess("Account created! You can now sign in."); setMode("signin"); }
+    }
+    setLoading(false);
+  }
+
+  const inputStyle = {
+    width: "100%", padding: "11px 14px", background: "#111113",
+    border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8,
+    color: C.text, fontSize: 14, fontFamily: F.sans, outline: "none",
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.base, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: F.sans }}>
+      <Styles />
+      <div style={{ width: 380, animation: "popIn 0.25s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 40, justifyContent: "center" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 8, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 28px rgba(200,169,110,0.2)" }}>
+            <span style={{ fontFamily: F.serif, fontSize: 20, fontWeight: 500, color: C.base }}>P</span>
+          </div>
+          <span style={{ fontFamily: F.serif, fontSize: 22, fontWeight: 500, color: C.text }}>The Pulse</span>
+        </div>
+        <div style={{ background: C.elevated, border: `1px solid ${C.stroke}`, borderRadius: 14, padding: "32px 28px" }}>
+          <h2 style={{ fontSize: 17, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+            {mode === "signin" ? "Sign in" : "Create account"}
+          </h2>
+          <p style={{ fontSize: 13, color: C.textSoft, marginBottom: 24 }}>
+            {mode === "signin" ? "Welcome back." : "Set up your Pulse account."}
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <input type="email" placeholder="Email address" value={email}
+              onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()}
+              style={inputStyle} autoFocus />
+            <input type="password" placeholder="Password" value={password}
+              onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()}
+              style={inputStyle} />
+          </div>
+          {error && <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(212,128,106,0.1)", border: "1px solid rgba(212,128,106,0.2)", borderRadius: 7, fontSize: 13, color: C.coral }}>{error}</div>}
+          {success && <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(109,175,123,0.1)", border: "1px solid rgba(109,175,123,0.2)", borderRadius: 7, fontSize: 13, color: C.green }}>{success}</div>}
+          <button onClick={handleSubmit} disabled={loading}
+            style={{ width: "100%", marginTop: 18, padding: "11px 0", background: loading ? "rgba(200,169,110,0.4)" : C.gold, border: "none", borderRadius: 8, cursor: loading ? "not-allowed" : "pointer", color: C.base, fontSize: 14, fontWeight: 600, fontFamily: F.sans }}>
+            {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
+          </button>
+          <div style={{ marginTop: 18, textAlign: "center", fontSize: 13, color: C.textSoft }}>
+            {mode === "signin" ? <>Don’t have an account?{" "}<button onClick={() => { setMode("signup"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 13, fontFamily: F.sans, padding: 0 }}>Create one</button></> : <>Already have an account?{" "}<button onClick={() => { setMode("signin"); setError(""); setSuccess(""); }} style={{ background: "none", border: "none", color: C.gold, cursor: "pointer", fontSize: 13, fontFamily: F.sans, padding: 0 }}>Sign in</button></>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Rail({ view, setView, onSignOut }) {
   const [expanded, setExpanded] = useState(false);
   const railWidth = expanded ? RAIL_EXPANDED : RAIL_COLLAPSED;
 
@@ -2176,18 +2253,18 @@ function Rail({ view, setView }) {
     { id: "performance", icon: Icons.performance, label: "Performance" },
   ];
 
-  function NavItem({ id, icon: Ic, label }) {
+  function NavItem({ id, icon: Ic, label, onClick }) {
     const active = view === id;
     const [h, setH] = useState(false);
     return (
-      <button onClick={() => setView(id)} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      <button onClick={onClick || (() => setView(id))} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
         style={{
           width: "100%", height: 44, display: "flex", alignItems: "center",
           paddingLeft: 20, gap: 14,
           background: "none", border: "none", cursor: "pointer", position: "relative",
           color: active ? C.gold : h ? C.textSoft : C.textGhost, transition: "color 0.15s",
         }}>
-        {active && <div style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 2, background: C.gold, borderRadius: "0 2px 2px 0", boxShadow: `0 0 8px ${C.gold}30` }} />}
+        {active && !onClick && <div style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 2, background: C.gold, borderRadius: "0 2px 2px 0", boxShadow: `0 0 8px ${C.gold}30` }} />}
         <Ic />
         {expanded && (
           <span style={{ fontSize: 13, fontFamily: F.sans, fontWeight: active ? 500 : 400, whiteSpace: "nowrap", opacity: expanded ? 1 : 0, transition: "opacity 0.15s" }}>
@@ -2197,6 +2274,8 @@ function Rail({ view, setView }) {
       </button>
     );
   }
+
+  const SignOutIcon = () => <I d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />;
 
   return (
     <div
@@ -2221,6 +2300,7 @@ function Rail({ view, setView }) {
       <div style={{ marginBottom: 16, display: "flex", flexDirection: "column", gap: 2 }}>
         <NavItem id="profile" icon={Icons.user} label="Profile" />
         <NavItem id="settings" icon={Icons.settings} label="Settings" />
+        <NavItem id="signout" icon={SignOutIcon} label="Sign out" onClick={onSignOut} />
       </div>
     </div>
   );
@@ -2231,14 +2311,48 @@ function Rail({ view, setView }) {
 // ═══════════════════════════════════════════
 
 export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = loading, null = no session
   const [view, setView] = useState("posts");
   const views = { posts: PostsView, comments: CommentsView, outreach: OutreachView, performance: PerformanceView, profile: ProfileView, settings: SettingsView };
   const View = views[view];
 
+  useEffect(() => {
+    const supabase = createBrowserClient();
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session ?? null));
+    // Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleSignOut() {
+    const supabase = createBrowserClient();
+    await supabase.auth.signOut();
+    setSession(null);
+  }
+
+  // Loading state — blank screen while checking session
+  if (session === undefined) {
+    return (
+      <div style={{ minHeight: "100vh", background: C.base, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <Styles />
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: C.gold, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontFamily: F.serif, fontSize: 16, fontWeight: 500, color: C.base }}>P</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated — show login/signup screen
+  if (!session) return <AuthScreen onAuth={setSession} />;
+
+  // Authenticated — show dashboard
   return (
     <div style={{ fontFamily: F.sans, color: C.text, background: C.base, minHeight: "100vh" }}>
       <Styles />
-      <Rail view={view} setView={setView} />
+      <Rail view={view} setView={setView} onSignOut={handleSignOut} />
       <main style={{ marginLeft: RAIL_W, minHeight: "100vh", overflow: "auto", maxHeight: "100vh" }}>
         <div style={{ maxWidth: view === "performance" || view === "comments" ? 860 : 680, margin: "0 auto", padding: "48px 40px 80px", transition: "max-width 0.3s ease" }}>
           <View key={view} />
