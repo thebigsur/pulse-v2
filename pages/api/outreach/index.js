@@ -1,12 +1,16 @@
 // /api/outreach — Get leads, mark as messaged/dismissed
-import { createServerClient } from '../../../lib/supabase';
+import { createServerClient, getUserId } from '../../../lib/supabase';
 
 export default async function handler(req, res) {
+  const userId = await getUserId(req);
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
   const db = createServerClient();
 
   if (req.method === 'GET') {
     const { data, error } = await db.from('outreach_leads')
       .select('*')
+      .eq('user_id', userId)
       .eq('status', 'pending')
       .order('surfaced_at', { ascending: false })
       .limit(20);
@@ -19,7 +23,10 @@ export default async function handler(req, res) {
     if (!id || !['messaged', 'dismissed'].includes(status)) {
       return res.status(400).json({ error: 'id and valid status required' });
     }
-    const { error } = await db.from('outreach_leads').update({ status }).eq('id', id);
+    const { error } = await db.from('outreach_leads')
+      .update({ status })
+      .eq('id', id)
+      .eq('user_id', userId);
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ success: true });
   }
