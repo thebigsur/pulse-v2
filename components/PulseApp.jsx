@@ -291,13 +291,9 @@ function PostsView() {
 
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
-  // Map API data to UI shape and split by status
+  // Active and approved draft lists
   const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft);
   const approvedDrafts = rawDrafts.filter(d => d.draft_status === 'approved').map(mapApiDraft);
-
-  // Current draft = first active one (one at a time)
-  const currentDraft = activeDrafts[0] || null;
-  const remainingCount = activeDrafts.length;
 
   const handleApprove = async (draft) => {
     try {
@@ -361,7 +357,7 @@ function PostsView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={loading ? "Loading drafts..." : `${remainingCount} remaining · ${approvedDrafts.length} approved`}>
+      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} to review · ${approvedDrafts.length} approved`}>
         Posts
       </SectionTitle>
 
@@ -372,118 +368,141 @@ function PostsView() {
         </div>
       )}
 
-      {!loading && !currentDraft && approvedDrafts.length === 0 && (
+      {!loading && activeDrafts.length === 0 && approvedDrafts.length === 0 && (
         <div style={{ padding: "60px 0", textAlign: "center" }}>
           <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No drafts yet</p>
           <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Run the content pipeline to generate drafts from trending content.</p>
         </div>
       )}
 
-      {!loading && (currentDraft || approvedDrafts.length > 0) && <>
+      {!loading && (activeDrafts.length > 0 || approvedDrafts.length > 0) && <>
 
-        {/* ─── Current Draft (one at a time) ─── */}
-        {currentDraft && (() => {
-          const draft = currentDraft;
-          const tc = getTopicColor(draft.topic);
+        {/* ─── Active Drafts (collapsible, first one expanded by default) ─── */}
+        {activeDrafts.length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Review · {activeDrafts.length} draft{activeDrafts.length > 1 ? 's' : ''}</p>
+            {activeDrafts.map((draft, idx) => {
+              const tc = getTopicColor(draft.topic);
+              const isExpanded = expandedApproved[`active-${draft.id}`] ?? (idx === 0);
 
-          return (
-            <div key={draft.id} style={{
-              animation: "slideUp 0.3s ease both",
-              borderLeft: `2px solid ${tc.fg}`,
-              paddingLeft: 24,
-              marginBottom: 32,
-            }}>
-              {/* Topic tag + word count + remaining counter */}
-              <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
-                <Tag color={tc.fg} bg={tc.bg}>{draft.topic}</Tag>
-                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{wordCount(draft.text)}w</span>
-                {draft.imageHint && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 4, color: C.blue, fontSize: 11 }}>
-                    <Icons.image /> Image suggested
-                  </span>
-                )}
-                {draft.hashtags && (
-                  <span style={{ fontSize: 11, color: C.textGhost }}>
-                    {draft.hashtags.join(" ")}
-                  </span>
-                )}
-                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginLeft: "auto" }}>
-                  {remainingCount} remaining
-                </span>
-              </div>
+              return (
+                <div key={draft.id} style={{ borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${idx * 0.06}s both` }}>
+                  {/* Collapsed header — always visible */}
+                  <div
+                    onClick={() => setExpandedApproved(e => ({ ...e, [`active-${draft.id}`]: !isExpanded }))}
+                    style={{
+                      padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center",
+                      cursor: "pointer", transition: "background 0.15s", borderRadius: 4,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: tc.fg, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, color: C.textSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{draft.text.split("\n")[0]}</span>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{wordCount(draft.text)}w</span>
+                      <Tag color={tc.fg} bg={tc.bg}>{draft.topic}</Tag>
+                      <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}><Icons.chevRight /></span>
+                    </div>
+                  </div>
 
-              {/* Draft text */}
-              <div style={{
-                fontSize: 15, color: C.text, lineHeight: 1.8,
-                whiteSpace: "pre-wrap", marginBottom: 16,
-                maxWidth: 580,
-              }}>
-                {draft.text}
-              </div>
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div style={{ padding: "0 0 20px 18px", animation: "fadeIn 0.2s ease", borderLeft: `2px solid ${tc.fg}` }}>
+                      {/* Meta row */}
+                      <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+                        {draft.imageHint && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 4, color: C.blue, fontSize: 11 }}>
+                            <Icons.image /> Image suggested
+                          </span>
+                        )}
+                        {draft.hashtags && (
+                          <span style={{ fontSize: 11, color: C.textGhost }}>
+                            {draft.hashtags.join(" ")}
+                          </span>
+                        )}
+                      </div>
 
-              {/* Image hint if present */}
-              {draft.imageHint && (
-                <div style={{
-                  padding: "12px 16px", background: C.blueSoft,
-                  borderRadius: 6, marginBottom: 14, maxWidth: 580,
-                  display: "flex", alignItems: "center", gap: 10,
-                }}>
-                  <Icons.image />
-                  <span style={{ fontSize: 13, color: C.blue }}>{draft.imageHint}</span>
-                </div>
-              )}
+                      {/* Draft text */}
+                      <div style={{
+                        fontSize: 15, color: C.text, lineHeight: 1.8,
+                        whiteSpace: "pre-wrap", marginBottom: 16,
+                        maxWidth: 580, paddingLeft: 16,
+                      }}>
+                        {draft.text}
+                      </div>
 
-              {/* Source — collapsible */}
-              <button onClick={() => setShowSource(s => ({ ...s, [draft.id]: !s[draft.id] }))}
-                style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 6,
-                  color: C.textGhost, fontSize: 12, fontFamily: F.sans, padding: 0,
-                  marginBottom: showSource[draft.id] ? 0 : 20, transition: "color 0.15s",
-                }}
-                onMouseEnter={e => e.currentTarget.style.color = C.textFaint}
-                onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
-              >
-                <span style={{ transform: showSource[draft.id] ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}>
-                  <Icons.chevRight />
-                </span>
-                Source
-              </button>
-              {showSource[draft.id] && (
-                <div style={{ padding: "10px 0 20px", animation: "fadeIn 0.2s ease" }}>
-                  <p style={{ fontSize: 12, color: C.textFaint }}>
-                    <span style={{ color: C.gold }}>{draft.source.author}</span>
-                    <span style={{ margin: "0 8px", color: C.textGhost }}>·</span>
-                    {draft.source.engagement}
-                  </p>
-                  <p style={{ fontSize: 13, color: C.textFaint, fontStyle: "italic", marginTop: 4 }}>"{draft.source.text}"</p>
-                  {draft.source.url && (
-                    <a href={draft.source.url} target="_blank" rel="noopener noreferrer"
-                      style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.textGhost, marginTop: 8, textDecoration: "none", transition: "color 0.15s" }}
-                      onMouseEnter={e => e.currentTarget.style.color = C.gold}
-                      onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
-                    >
-                      <Icons.external /> View original post
-                    </a>
+                      {/* Image hint */}
+                      {draft.imageHint && (
+                        <div style={{
+                          padding: "12px 16px", background: C.blueSoft,
+                          borderRadius: 6, marginBottom: 14, maxWidth: 580, marginLeft: 16,
+                          display: "flex", alignItems: "center", gap: 10,
+                        }}>
+                          <Icons.image />
+                          <span style={{ fontSize: 13, color: C.blue }}>{draft.imageHint}</span>
+                        </div>
+                      )}
+
+                      {/* Source — collapsible */}
+                      <div style={{ paddingLeft: 16 }}>
+                        <button onClick={(e) => { e.stopPropagation(); setShowSource(s => ({ ...s, [draft.id]: !s[draft.id] })); }}
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            display: "flex", alignItems: "center", gap: 6,
+                            color: C.textGhost, fontSize: 12, fontFamily: F.sans, padding: 0,
+                            marginBottom: showSource[draft.id] ? 0 : 20, transition: "color 0.15s",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.color = C.textFaint}
+                          onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
+                        >
+                          <span style={{ transform: showSource[draft.id] ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}>
+                            <Icons.chevRight />
+                          </span>
+                          Source
+                        </button>
+                        {showSource[draft.id] && (
+                          <div style={{ padding: "10px 0 20px", animation: "fadeIn 0.2s ease" }}>
+                            <p style={{ fontSize: 12, color: C.textFaint }}>
+                              <span style={{ color: C.gold }}>{draft.source.author}</span>
+                              <span style={{ margin: "0 8px", color: C.textGhost }}>·</span>
+                              {draft.source.engagement}
+                            </p>
+                            <p style={{ fontSize: 13, color: C.textFaint, fontStyle: "italic", marginTop: 4 }}>"{draft.source.text}"</p>
+                            {draft.source.url && (
+                              <a href={draft.source.url} target="_blank" rel="noopener noreferrer"
+                                style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: C.textGhost, marginTop: 8, textDecoration: "none", transition: "color 0.15s" }}
+                                onMouseEnter={e => e.currentTarget.style.color = C.gold}
+                                onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
+                              >
+                                <Icons.external /> View original post
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Actions: Approve + Skip */}
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <Btn primary onClick={(e) => { e.stopPropagation(); handleApprove(draft); }}>
+                            <Icons.check /> Approve
+                          </Btn>
+                          <Btn onClick={(e) => { e.stopPropagation(); handleSkip(draft.id); }}>
+                            Skip
+                          </Btn>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
-              )}
-
-              {/* Actions: Approve + Skip */}
-              <div style={{ display: "flex", gap: 10 }}>
-                <Btn primary onClick={() => handleApprove(draft)}>
-                  <Icons.check /> Approve
-                </Btn>
-                <Btn onClick={() => handleSkip(draft.id)}>
-                  Skip
-                </Btn>
-              </div>
-            </div>
-          );
-        })()}
+              );
+            })}
+          </div>
+        )}
 
         {/* All caught up state */}
-        {!currentDraft && (
+        {activeDrafts.length === 0 && (
           <div style={{ padding: "50px 0", animation: "fadeIn 0.3s ease" }}>
             <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All caught up.</p>
             <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
