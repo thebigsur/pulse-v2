@@ -88,22 +88,62 @@ export default async function handler(req, res) {
     }
 
     // 5. Generate drafts for top posts that don't have them
+    //    History-aware: skip source posts that overlap with recent advisor posts
     const { data: topPosts } = await db.from('content_feed')
       .select('*')
       .is('draft_text', null)
       .not('scored_at', 'is', null)
       .eq('draft_status', 'pending')
       .order('expertise_signal', { ascending: false })
-      .limit(8);
+      .limit(20); // Fetch more candidates so we can filter
 
     const { data: postHistory } = await db.from('advisor_posts')
-      .select('*').order('posted_at', { ascending: false }).limit(15);
+      .select('*').order('posted_at', { ascending: false }).limit(30);
     const { data: voiceSamples } = await db.from('voice_samples')
       .select('*').eq('type', 'post');
     const { data: contentPrefs } = await db.from('content_preferences')
       .select('*').eq('active', true);
 
-    for (const post of (topPosts || [])) {
+    // Build recent topic set from last 14 days of actual posts
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+    const recentPosts = (postHistory || []).filter(p => 
+      p.posted_at && new Date(p.posted_at) >= fourteenDaysAgo
+    );
+    const recentTopicTags = new Set(
+      recentPosts.flatMap(p => (p.topic_tags || []).map(t => t.toLowerCase()))
+    );
+    // Extract key topic words from recent post text for broader matching
+    const recentTopicWords = new Set();
+    recentPosts.forEach(p => {
+      const text = (p.post_text || '').toLowerCase();
+      const keywords = ['rsu', 'iso', 'nso', 'stock option', 'equity comp', '401k', '401(k)',
+        'roth', 'solo 401', 'tax', 'capital gain', 'estate plan', 'wealth transfer',
+        'inheritance', 'home price', 'real estate', 'market', 'valuation', 's&p',
+        'salary', 'bonus', 'insurance', 'debt', 'budget', 'net worth'];
+      keywords.forEach(kw => { if (text.includes(kw)) recentTopicWords.add(kw); });
+    });
+
+    // Score each candidate for topic overlap with recent history
+    const scoredCandidates = (topPosts || []).map(post => {
+      const postText = (post.post_text || '').toLowerCase();
+      const angle = (post.suggested_angle || '').toLowerCase();
+      // Check tag overlap
+      const tagOverlap = recentTopicTags.size > 0 && 
+        [...recentTopicTags].some(tag => postText.includes(tag) || angle.includes(tag));
+      // Check keyword overlap
+      const kwOverlap = [...recentTopicWords].filter(kw => postText.includes(kw)).length;
+      // Penalize high overlap, prefer fresh topics
+      const overlapPenalty = (tagOverlap ? 30 : 0) + (kwOverlap * 10);
+      return { post, overlapPenalty, originalScore: post.expertise_signal || 0 };
+    });
+    // Sort by adjusted score (original score minus overlap penalty), take top 8
+    scoredCandidates.sort((a, b) => (b.originalScore - b.overlapPenalty) - (a.originalScore - a.overlapPenalty));
+    const filteredTopPosts = scoredCandidates.slice(0, 8).map(c => c.post);
+
+    console.log(`[Content] Draft candidates: ${(topPosts || []).length} total → ${filteredTopPosts.length} after history filter (${recentPosts.length} posts in last 14d, ${recentTopicWords.size} topic keywords)`);
+
+    for (const post of filteredTopPosts) {
       try {
         const draft = await generateDraft(post, profile || {}, postHistory || [], voiceSamples || [], contentPrefs || []);
         if (draft) {
