@@ -1049,19 +1049,27 @@ function PerformanceView() {
     { label: "Connections", value: 0, color: C.green },
   ];
 
-  // Compute topic breakdown from filtered posts
+  // Compute topic breakdown from filtered posts — track all engagement for conversation rate
   const topicMap = {};
   filteredPosts.forEach(p => {
     const tags = p.topic_tags || [];
     const tag = tags[0] || "General";
-    if (!topicMap[tag]) topicMap[tag] = { totalLikes: 0, count: 0 };
+    if (!topicMap[tag]) topicMap[tag] = { totalLikes: 0, totalComments: 0, totalImpressions: 0, count: 0 };
     topicMap[tag].totalLikes += (p.likes || 0);
+    topicMap[tag].totalComments += (p.comments || 0);
+    topicMap[tag].totalImpressions += (p.impressions || 0);
     topicMap[tag].count += 1;
   });
   const topicList = Object.entries(topicMap).map(([name, d]) => ({
-    name, avg: d.count > 0 ? Math.round(d.totalLikes / d.count) : 0, count: d.count,
-  })).sort((a, b) => b.avg - a.avg);
-  const maxAvg = topicList.length > 0 ? topicList[0].avg : 1;
+    name,
+    count: d.count,
+    avgImpressions: d.count > 0 ? Math.round(d.totalImpressions / d.count) : 0,
+    avgComments: d.count > 0 ? Math.round((d.totalComments / d.count) * 10) / 10 : 0,
+    avgLikes: d.count > 0 ? Math.round(d.totalLikes / d.count) : 0,
+    // Conversation rate: comments per 1K impressions
+    convRate: d.totalImpressions > 0 ? Math.round((d.totalComments / d.totalImpressions) * 10000) / 10 : 0,
+  })).sort((a, b) => b.convRate - a.convRate);
+  const maxConvRate = topicList.length > 0 ? Math.max(...topicList.map(t => t.convRate), 1) : 1;
 
   const handleSaveImpressions = async (postId) => {
     const val = parseInt(impValue);
@@ -1143,14 +1151,30 @@ function PerformanceView() {
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, marginBottom: 48 }}>
         {/* Top posts */}
         <div>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>Top posts{filteredPosts.length > 0 ? ` · ${Math.min(filteredPosts.length, postLimit)} of ${filteredPosts.length}` : ""}</p>
+          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Top posts{filteredPosts.length > 0 ? ` · ${Math.min(filteredPosts.length, postLimit)} of ${filteredPosts.length}` : ""}</p>
+          {filteredPosts.length > 0 && (
+            <div style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}><span style={{ width: 8, height: 3, borderRadius: 1, background: C.gold }} /><span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost }}>Reach</span></div>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}><span style={{ width: 8, height: 3, borderRadius: 1, background: "#4ade80" }} /><span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost }}>Comments</span></div>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}><span style={{ width: 8, height: 3, borderRadius: 1, background: C.purple }} /><span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost }}>Likes</span></div>
+            </div>
+          )}
           {filteredPosts.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>No posts in this period.</p>}
-          {[...filteredPosts].sort((a, b) => (b.likes || 0) - (a.likes || 0)).slice(0, postLimit).map((p, i) => {
+          {[...filteredPosts].sort((a, b) => (getPostScore(b) || 0) - (getPostScore(a) || 0)).slice(0, postLimit).map((p, i) => {
             const tag = (p.topic_tags || [])[0] || "General";
             const tc = getTopicColor(tag);
             const date = p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
             const engRate = getPostScore(p);
             const grade = getGrade(engRate);
+
+            // Score breakdown for mini bar
+            const impPart = (p.impressions || 0) * 3;
+            const comPart = (p.comments || 0) * 50;
+            const likPart = (p.likes || 0) * 10;
+            const totalParts = impPart + comPart + likPart;
+            const impPct = totalParts > 0 ? (impPart / totalParts) * 100 : 0;
+            const comPct = totalParts > 0 ? (comPart / totalParts) * 100 : 0;
+            const likPct = totalParts > 0 ? (likPart / totalParts) * 100 : 0;
 
             return (
               <div key={p.id || i} style={{ padding: "16px 8px", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.06}s both`, borderRadius: 4, margin: "0 -8px", position: "relative", zIndex: editingCat === p.id ? 10 : 1 }}
@@ -1237,6 +1261,14 @@ function PerformanceView() {
                         {(p.impressions || 0) > 0 ? `${p.impressions.toLocaleString()} imp` : "+ imp"}
                       </button>
                     )}
+                    {/* Score breakdown bar: reach (gold) | comments (green) | likes (purple) */}
+                    {totalParts > 0 && (
+                      <div style={{ display: "flex", width: 80, height: 3, borderRadius: 2, overflow: "hidden", marginTop: 2 }} title={`Reach ${Math.round(impPct)}% · Comments ${Math.round(comPct)}% · Likes ${Math.round(likPct)}%`}>
+                        <div style={{ width: `${impPct}%`, background: C.gold, transition: "width 0.5s ease" }} />
+                        <div style={{ width: `${comPct}%`, background: "#4ade80", transition: "width 0.5s ease" }} />
+                        <div style={{ width: `${likPct}%`, background: C.purple, transition: "width 0.5s ease" }} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1246,21 +1278,36 @@ function PerformanceView() {
 
         {/* Topics breakdown */}
         <div>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 16 }}>By topic</p>
+          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>By topic</p>
+          <p style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, marginBottom: 16 }}>Sorted by conversation rate (comments per 1K impressions)</p>
           {topicList.length === 0 && <p style={{ fontSize: 12, color: C.textFaint }}>Topics appear as you log posts.</p>}
+          {/* Column headers */}
+          {topicList.length > 0 && (
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 0, marginBottom: 4, paddingRight: 0 }}>
+              <span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, width: 56, textAlign: "right" }}>avg imp</span>
+              <span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, width: 52, textAlign: "right" }}>avg cmt</span>
+              <span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, width: 56, textAlign: "right" }}>conv rate</span>
+            </div>
+          )}
           {topicList.map((t, i) => {
             const tc = getTopicColor(t.name);
+            const barPct = maxConvRate > 0 ? (t.convRate / maxConvRate) * 100 : 0;
             return (
-              <div key={i} style={{ padding: "12px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both` }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, color: C.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 8 }}>
+              <div key={i} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${i * 0.04}s both` }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, color: C.text, fontWeight: 500, display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: tc.fg, flexShrink: 0 }} />
-                    {t.name}
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span>
+                    <span style={{ fontSize: 9, fontFamily: F.mono, color: C.textGhost, flexShrink: 0 }}>×{t.count}</span>
                   </span>
-                  <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{t.avg} avg · {t.count}</span>
+                  <div style={{ display: "flex", gap: 0, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint, width: 56, textAlign: "right" }}>{t.avgImpressions > 0 ? (t.avgImpressions >= 1000 ? `${(t.avgImpressions / 1000).toFixed(1)}K` : t.avgImpressions) : "—"}</span>
+                    <span style={{ fontSize: 11, fontFamily: F.mono, color: "#4ade80", width: 52, textAlign: "right" }}>{t.avgComments > 0 ? t.avgComments : "—"}</span>
+                    <span style={{ fontSize: 11, fontFamily: F.mono, color: C.gold, fontWeight: 600, width: 56, textAlign: "right" }}>{t.convRate > 0 ? t.convRate : "—"}</span>
+                  </div>
                 </div>
-                <div style={{ height: 4, background: C.stroke, borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${maxAvg > 0 ? (t.avg / maxAvg) * 100 : 0}%`, background: tc.fg, borderRadius: 2, transition: "width 1s ease", opacity: 0.7 }} />
+                <div style={{ height: 3, background: C.stroke, borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${barPct}%`, background: tc.fg, borderRadius: 2, transition: "width 1s ease", opacity: 0.7 }} />
                 </div>
               </div>
             );
