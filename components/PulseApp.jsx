@@ -1891,27 +1891,131 @@ function RulesForm({ profile, updateField, onSave, saving, saved }) {
   </div>);
 }
 
-function VoiceForm({ profile, updateField, onSave, saving, saved }) {
+function VoiceSampleSection({ type, label, hint }) {
+  const [samples, setSamples] = useState(null); // null = loading
   const [showAdd, setShowAdd] = useState(false);
-  return (<div style={{ animation: "fadeIn 0.2s ease" }}>
-    <Field label="Post Voice Samples" hint="Your real LinkedIn posts — the AI learns your writing style from these">
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-        {["Your RSUs aren't a bonus...", "I make $350K and I'm broke...", "The S&P 500 at 22x earnings...", "Hot take: Your 401(k) match..."].map((s, i) => (
-          <div key={i} style={{ padding: "8px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 13, color: C.textSoft }}>{s}</span>
-            <button style={{ background: "none", border: "none", color: C.textGhost, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>×</button>
+  const [newText, setNewText] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [error, setError] = useState(null);
+
+  const load = async () => {
+    try {
+      const res = await authFetch("/api/profile?section=voice");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setSamples((data || []).filter(s => s.type === type));
+    } catch (e) {
+      setError("Failed to load samples");
+      setSamples([]);
+    }
+  };
+
+  useEffect(() => { load(); }, [type]);
+
+  const handleAdd = async () => {
+    if (!newText.trim()) return;
+    setAdding(true);
+    setError(null);
+    try {
+      const res = await authFetch("/api/profile?section=voice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, sample_text: newText.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to add");
+      setNewText("");
+      setShowAdd(false);
+      await load();
+    } catch (e) {
+      setError("Failed to add sample");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    setDeletingId(id);
+    setError(null);
+    try {
+      const res = await authFetch("/api/profile?section=voice", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      await load();
+    } catch (e) {
+      setError("Failed to delete sample");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <Field label={label} hint={hint}>
+      {samples === null ? (
+        <p style={{ fontSize: 12, color: C.textGhost, fontFamily: F.mono }}>Loading...</p>
+      ) : (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 12 }}>
+            {samples.map(s => (
+              <div key={s.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ fontSize: 13, color: C.textSoft, flex: 1, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {s.sample_text.length > 120 ? s.sample_text.substring(0, 120) + "…" : s.sample_text}
+                </span>
+                <button
+                  onClick={() => handleDelete(s.id)}
+                  disabled={deletingId === s.id}
+                  style={{ background: "none", border: "none", color: deletingId === s.id ? C.textGhost : C.textFaint, cursor: "pointer", fontSize: 16, padding: "0 4px", flexShrink: 0, lineHeight: 1, opacity: deletingId === s.id ? 0.4 : 1 }}
+                  title="Remove sample"
+                >×</button>
+              </div>
+            ))}
+            {samples.length === 0 && !showAdd && (
+              <p style={{ fontSize: 12, color: C.textGhost, fontFamily: F.mono, marginBottom: 8 }}>No samples yet.</p>
+            )}
           </div>
-        ))}
-      </div>
-      <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginBottom: 12 }}>4 samples</p>
-      {showAdd ? (<div><Input multiline rows={5} placeholder="Paste a LinkedIn post..." /><div style={{ display: "flex", gap: 8, marginTop: 10 }}><Btn primary>Add</Btn><Btn ghost onClick={() => setShowAdd(false)}>Cancel</Btn></div></div>)
-        : <Btn onClick={() => setShowAdd(true)}>+ Add Sample</Btn>}
+          <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginBottom: 12 }}>{samples.length} sample{samples.length !== 1 ? "s" : ""}</p>
+          {showAdd ? (
+            <div>
+              <Input
+                multiline
+                rows={5}
+                value={newText}
+                onChange={v => setNewText(v)}
+                placeholder={type === "post" ? "Paste a full LinkedIn post..." : "Paste a LinkedIn comment..."}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <Btn primary onClick={handleAdd} style={{ opacity: adding ? 0.6 : 1 }}>
+                  {adding ? "Adding..." : "Add"}
+                </Btn>
+                <Btn ghost onClick={() => { setShowAdd(false); setNewText(""); }}>Cancel</Btn>
+              </div>
+            </div>
+          ) : (
+            <Btn onClick={() => setShowAdd(true)}>+ Add Sample</Btn>
+          )}
+          {error && <p style={{ fontSize: 11, color: "#e05252", fontFamily: F.mono, marginTop: 8 }}>{error}</p>}
+        </>
+      )}
     </Field>
+  );
+}
+
+function VoiceForm({ profile, updateField, onSave, saving, saved }) {
+  return (<div style={{ animation: "fadeIn 0.2s ease" }}>
+    <VoiceSampleSection
+      type="post"
+      label="Post Voice Samples"
+      hint="Your real LinkedIn posts — the AI learns your writing style from these"
+    />
     <Separator />
-    <Field label="Comment Voice Samples" hint="Comment style is different from post style — paste real comments">
-      <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, marginBottom: 12 }}>2 samples</p>
-      <Btn>+ Add Sample</Btn>
-    </Field>
+    <VoiceSampleSection
+      type="comment"
+      label="Comment Voice Samples"
+      hint="Comment style is different from post style — paste real comments"
+    />
     <Separator />
     <Field label="Voice Notes" hint="Free-form style rules, preferences, and guidelines that shape how AI generates your content. Write in your own words — these are fed directly into every draft and comment generation.">
       <Input multiline rows={8} value={profile.voice_notes} onChange={v => updateField("voice_notes", v)} placeholder="e.g. Never use exclamation marks. Always lead with a specific dollar amount or stat when possible. My humor is dry and deadpan — never use 'LOL' or emojis. Refer to my audience as 'high earners' not 'wealthy individuals'..." />
