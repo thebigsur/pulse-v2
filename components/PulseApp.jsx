@@ -271,6 +271,15 @@ function mapApiDraft(item) {
     hookType: item.draft_hook_type || null,
     imageHint: item.draft_image_hint || null,
     hashtags: (item.draft_hashtags && item.draft_hashtags.length > 0) ? item.draft_hashtags : null,
+    // Parse repetitive flag encoded in continuity_ref
+    ...((() => {
+      const ref = item.draft_continuity_ref || '';
+      if (ref.startsWith('REPETITIVE_FLAG:')) {
+        const [reasonPart, anglePart] = ref.slice('REPETITIVE_FLAG:'.length).split('||FRESH_ANGLE:');
+        return { repetitiveFlag: true, repetitiveReason: reasonPart || '', freshAngle: anglePart || '' };
+      }
+      return { repetitiveFlag: false, continuityRef: ref || null };
+    })()),
   };
 }
 
@@ -314,7 +323,7 @@ function PostsView() {
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
   // Active and approved draft lists
-  const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft);
+  const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft).sort((a, b) => (a.repetitiveFlag ? 1 : 0) - (b.repetitiveFlag ? 1 : 0));
   const approvedDrafts = rawDrafts.filter(d => d.draft_status === 'approved').map(mapApiDraft);
 
   const handleApprove = async (draft) => {
@@ -448,6 +457,9 @@ function PostsView() {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, minWidth: 0 }}>
                       <div style={{ width: 8, height: 8, borderRadius: "50%", background: tc.fg, flexShrink: 0 }} />
                       <span style={{ fontSize: 14, color: C.textSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{draft.text.split("\n")[0]}</span>
+                      {draft.repetitiveFlag && (
+                        <span title="Similar topic posted recently — AI verified new angle" style={{ fontSize: 11, flexShrink: 0, opacity: 0.8 }}>⚠️</span>
+                      )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                       <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{wordCount(draft.text)}w</span>
@@ -472,6 +484,29 @@ function PostsView() {
                           </span>
                         )}
                       </div>
+
+                      {/* Repetitive flag warning */}
+                      {draft.repetitiveFlag && (
+                        <div style={{
+                          padding: "10px 14px", marginBottom: 14, marginLeft: 16, maxWidth: 580,
+                          background: "#2a2400", border: "1px solid #5a4e00", borderRadius: 6,
+                          display: "flex", flexDirection: "column", gap: 4,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 13 }}>⚠️</span>
+                            <span style={{ fontSize: 11, fontFamily: F.mono, color: "#c8a800", textTransform: "uppercase", letterSpacing: "0.08em" }}>Similar topic posted recently</span>
+                          </div>
+                          {draft.repetitiveReason && (
+                            <p style={{ fontSize: 12, color: "#a08600", margin: 0 }}>{draft.repetitiveReason}</p>
+                          )}
+                          {draft.freshAngle && (
+                            <p style={{ fontSize: 12, color: "#7a9f6a", margin: 0 }}>
+                              <span style={{ color: "#5a7f4a", fontFamily: F.mono, fontSize: 10, textTransform: "uppercase", marginRight: 4 }}>New angle:</span>
+                              {draft.freshAngle}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {/* Draft text */}
                       <div style={{
