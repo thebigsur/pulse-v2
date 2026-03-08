@@ -2112,6 +2112,8 @@ function SettingsView() {
   const [runResult, setRunResult] = useState({});
   const [pipelineStatus, setPipelineStatus] = useState({});
   const [elapsed, setElapsed] = useState({});
+  const [resetting, setResetting] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
   const timerRefs = useRef({});
 
   // Fetch settings + pipeline status on mount
@@ -2164,6 +2166,22 @@ function SettingsView() {
     }
   };
 
+  const handleReset = async () => {
+    if (!window.confirm("This will clear all scored content and drafts from your queue so they get re-evaluated against your current profile on the next pipeline run. Continue?")) return;
+    setResetting(true);
+    try {
+      const res = await authFetch("/api/reset-content", { method: "POST" });
+      if (res.ok) {
+        setResetDone(true);
+        setTimeout(() => setResetDone(false), 4000);
+      }
+    } catch (err) {
+      console.error("Reset failed:", err);
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const handleRunPipeline = async (pipelineName, pipelineType) => {
     // Start running state + elapsed timer
     setRunning(r => ({ ...r, [pipelineName]: true }));
@@ -2213,6 +2231,17 @@ function SettingsView() {
         </div>
       </Field>
       <SaveButton onSave={saveSettings} saving={saving} saved={saved} />
+      <Separator />
+      <div style={{ marginBottom: 24, padding: "16px", background: "#0e0e10", borderRadius: 8, border: `1px solid ${C.stroke}` }}>
+        <p style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>Profile Changed?</p>
+        <p style={{ fontSize: 12, color: C.textFaint, marginBottom: 12, lineHeight: 1.5 }}>After updating your keywords, specialization, or ICP — reset the content queue so everything gets re-scored against your current profile on the next pipeline run.</p>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <Btn danger onClick={handleReset} style={{ opacity: resetting ? 0.6 : 1 }}>
+            {resetting ? "Resetting..." : "Reset & Re-score Queue"}
+          </Btn>
+          {resetDone && <span style={{ fontSize: 12, color: C.green, fontFamily: F.mono }}>✓ Queue cleared — run Content scrape to refill</span>}
+        </div>
+      </div>
       <Separator />
       <div style={{ marginBottom: 32 }}>
         <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Pipeline</p>
