@@ -10,26 +10,14 @@ export default async function handler(req, res) {
 
   const db = createServerClient();
 
-  // 1. Clear all scoring data so posts get re-scored with current profile on next run
-  const { error: scoreErr, count: scoreCount } = await db.from('content_feed')
-    .update({
-      expertise_signal: null,
-      icp_relevance: null,
-      suggested_angle: null,
-      scored_at: null,
-      draft_text: null,
-      draft_topic_tags: null,
-      draft_hook_type: null,
-      draft_image_hint: null,
-      draft_hashtags: null,
-      draft_source_urls: null,
-      draft_continuity_ref: null,
-      draft_status: 'pending',
-    })
-    .eq('user_id', userId)
-    .in('draft_status', ['generated', 'approved', 'skipped', 'expired', 'pending']);
+  // 1. Delete ALL content_feed posts for this user — full clean slate.
+  //    This ensures old keyword posts (e.g. equity comp) don't survive the reset
+  //    and clog the candidate queue on the next scrape run.
+  const { error: deleteErr } = await db.from('content_feed')
+    .delete()
+    .eq('user_id', userId);
 
-  if (scoreErr) return res.status(500).json({ error: scoreErr.message });
+  if (deleteErr) return res.status(500).json({ error: deleteErr.message });
 
   // 2. Return count for UI confirmation
   const { count } = await db.from('content_feed')
