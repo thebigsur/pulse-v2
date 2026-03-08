@@ -2,6 +2,22 @@ import { useState, useRef, useEffect } from "react";
 import { useDrafts, useComments, useOutreach, usePerformance } from "../lib/hooks";
 import { createBrowserClient } from "../lib/supabase";
 
+// authFetch — drop-in replacement for fetch() that automatically attaches
+// the Supabase session token as Authorization: Bearer <token>.
+// Every API route calls getUserId(req) which requires this header.
+async function authFetch(url, options = {}) {
+  const supabase = createBrowserClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════
 // THE PULSE v2 — Redesign v3
 // All drafts visible, meaningful color, Approve + New Draft
@@ -333,7 +349,7 @@ function PostsView() {
     if (!editingPost) return;
     setEditSaving(true);
     try {
-      await fetch('/api/post-history', {
+      await authFetch('/api/post-history', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,7 +367,7 @@ function PostsView() {
 
   const handleDeletePost = async (id) => {
     try {
-      await fetch('/api/post-history', {
+      await authFetch('/api/post-history', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
@@ -366,13 +382,13 @@ function PostsView() {
     setNotForMeSaving(true);
     try {
       // 1. Fetch current filters from profile
-      const profileRes = await fetch('/api/profile');
+      const profileRes = await authFetch('/api/profile');
       const profileData = await profileRes.json();
       const existing = (profileData.content_filters || '').trim();
       const updated = existing ? `${existing}\n${notForMeReason.trim()}` : notForMeReason.trim();
 
       // 2. Save updated filters to profile
-      await fetch('/api/profile', {
+      await authFetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content_filters: updated }),
@@ -1030,7 +1046,7 @@ function PerformanceView() {
   const handleCategoryChange = async (postId, newCategory) => {
     setEditingCat(null);
     try {
-      await fetch("/api/performance", {
+      await authFetch("/api/performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ post_id: postId, topic_tags: [newCategory] }),
@@ -1205,7 +1221,7 @@ function PerformanceView() {
     if (isNaN(val) || val < 0) return;
     setSavingImp(true);
     try {
-      await fetch("/api/performance", {
+      await authFetch("/api/performance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ post_id: postId, impressions: val }),
@@ -1507,7 +1523,7 @@ function ProfileView() {
 
   // Fetch profile from API on mount
   useEffect(() => {
-    fetch("/api/profile")
+    authFetch("/api/profile")
       .then(r => r.ok ? r.json() : Promise.reject(r))
       .then(data => { setProfile(data); setLoading(false); })
       .catch(() => {
@@ -1527,7 +1543,7 @@ function ProfileView() {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/profile", {
+      const res = await authFetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
@@ -1642,7 +1658,7 @@ function PostCategoriesForm({ profile, updateField, onSave, saving, saved }) {
       // First save the current categories
       await onSave();
       // Then run post history sync which will re-classify
-      const pipeRes = await fetch("/api/run-pipeline", {
+      const pipeRes = await authFetch("/api/run-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "post-history" }),
@@ -1996,7 +2012,7 @@ function SettingsView() {
 
   // Fetch settings + pipeline status on mount
   useEffect(() => {
-    fetch("/api/profile")
+    authFetch("/api/profile")
       .then(r => r.ok ? r.json() : Promise.reject(r))
       .then(data => { setSettings(data); setLoading(false); })
       .catch(() => { setSettings({}); setLoading(false); });
@@ -2010,7 +2026,7 @@ function SettingsView() {
 
   const fetchPipelineStatus = async () => {
     try {
-      const res = await fetch("/api/pipeline-status");
+      const res = await authFetch("/api/pipeline-status");
       if (res.ok) {
         const data = await res.json();
         setPipelineStatus(data);
@@ -2028,7 +2044,7 @@ function SettingsView() {
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const res = await fetch("/api/profile", {
+      const res = await authFetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
@@ -2057,7 +2073,7 @@ function SettingsView() {
     }, 1000);
 
     try {
-      const res = await fetch("/api/run-pipeline", {
+      const res = await authFetch("/api/run-pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: pipelineType }),
