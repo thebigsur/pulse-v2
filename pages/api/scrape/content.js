@@ -6,7 +6,7 @@
 
 import { createServerClient } from '../../../lib/supabase';
 import { scrapeLinkedInContent, scrapeTwitterContent } from '../../../lib/scraper';
-import { scoreContent, generateDraft } from '../../../lib/ai';
+import { scoreContent, generateDraft, checkDraftFreshness } from '../../../lib/ai';
 
 export const config = {
   maxDuration: 300,
@@ -46,8 +46,13 @@ export default async function handler(req, res) {
       .limit(1);
     const profile = profileRows?.[0];
 
-    const allKeywords = (profile?.content_keywords || 'equity compensation\nRSU tax strategy\nwealth building high earners')
+    const allKeywords = (profile?.content_keywords || '')
       .split('\n').map(k => k.trim()).filter(Boolean);
+    if (allKeywords.length === 0) {
+      console.log(`[Content:${userId.slice(0, 8)}] No keywords configured — skipping scrape`);
+      await db.from('scrape_log').update({ status: 'completed', completed_at: new Date().toISOString(), results_count: 0 }).eq('id', logId);
+      return res.status(200).json({ success: true, scraped: 0, scored: 0, errors: 0, message: 'No content keywords set. Add keywords in Settings.' });
+    }
 
     // Rotate 3 keywords per run to stay within timeout limits
     const MAX_KEYWORDS_PER_RUN = 3;
@@ -74,6 +79,17 @@ export default async function handler(req, res) {
         { onConflict: 'external_id,platform,user_id', ignoreDuplicates: true }
       );
     }
+
+    // 3b. Purge stale pending posts older than 30 days — they're from old keyword runs
+    //     and clog the draft candidate queue with off-topic source material
+    const purgeCutoff = new Date();
+    purgeCutoff.setDate(purgeCutoff.getDate() - 30);
+    await db.from('content_feed')
+      .delete()
+      .eq('user_id', userId)
+      .eq('draft_status', 'pending')
+      .is('draft_text', null)
+      .lt('scraped_at', purgeCutoff.toISOString());
 
     // 4. Score unscored posts for this user
     const { data: unscored } = await db.from('content_feed')
@@ -104,14 +120,39 @@ export default async function handler(req, res) {
 
     // 5. Generate drafts for top posts that don't have them yet
     //    History-aware: skip source posts that overlap with recent advisor posts
-    const { data: topPosts } = await db.from('content_feed')
+    // Fetch candidates in two tiers: recent (last 3 days) first, then older high-scorers
+    // This ensures new posts from updated keywords get priority over stale high-scoring posts
+    const recentCutoff = new Date();
+    recentCutoff.setDate(recentCutoff.getDate() - 3);
+
+    const { data: recentPending } = await db.from('content_feed')
       .select('*')
       .eq('user_id', userId)
       .is('draft_text', null)
       .not('scored_at', 'is', null)
       .eq('draft_status', 'pending')
+      .gte('scraped_at', recentCutoff.toISOString())
       .order('expertise_signal', { ascending: false })
-      .limit(20);
+      .limit(15);
+
+    const { data: olderPending } = await db.from('content_feed')
+      .select('*')
+      .eq('user_id', userId)
+      .is('draft_text', null)
+      .not('scored_at', 'is', null)
+      .eq('draft_status', 'pending')
+      .lt('scraped_at', recentCutoff.toISOString())
+      .order('expertise_signal', { ascending: false })
+      .limit(10);
+
+    // Merge: recent posts first, then fill remaining slots with older posts
+    const seen = new Set();
+    const topPosts = [];
+    for (const p of [...(recentPending || []), ...(olderPending || [])]) {
+      if (!seen.has(p.id)) { seen.add(p.id); topPosts.push(p); }
+      if (topPosts.length >= 20) break;
+    }
+    console.log(`[Content:${userId.slice(0,8)}] Candidates: ${(recentPending||[]).length} recent + ${(olderPending||[]).length} older = ${topPosts.length} total`);
 
     const { data: postHistory } = await db.from('advisor_posts')
       .select('*')
@@ -217,6 +258,7 @@ export default async function handler(req, res) {
       .eq('draft_status', 'generated')
       .lt('scored_at', expiryCutoff.toISOString());
 
+    // ─── Score and rank candidates — overlap adds penalty but never blocks ───
     console.log(`[Content:${userId.slice(0, 8)}] Recent 14d tags: ${[...recentTopicTags].join(', ') || 'none'}`);
     console.log(`[Content:${userId.slice(0, 8)}] Queue topic counts: ${JSON.stringify(queueTopicCounts)}`);
 
@@ -225,62 +267,60 @@ export default async function handler(req, res) {
       const angle = (post.suggested_angle || '').toLowerCase();
       const combined = `${postText} ${angle}`;
 
-      // Fix: properly match topic keywords against raw post text
       const recentKwHits = [...recentTopicWords].filter(kw => combined.includes(kw)).length;
       const queueKwHits = [...queuedTopicWords].filter(kw => combined.includes(kw)).length;
 
-      // Hard skip: if 3+ recent topic keywords match, this topic was very recently posted
-      const hardSkip = recentKwHits >= 3;
-
-      // Penalty: 15pts per recent topic keyword hit + 8pts per queued topic hit
-      const overlapPenalty = (recentKwHits * 15) + (queueKwHits * 8);
+      // Overlap adds penalty but NEVER blocks — all posts are eligible for drafting
+      const overlapPenalty = (recentKwHits * 12) + (queueKwHits * 6);
+      const needsFreshnessCheck = recentKwHits >= 2; // flag for post-generation check
 
       return {
         post,
-        hardSkip,
         overlapPenalty,
+        needsFreshnessCheck,
         originalScore: post.expertise_signal || 0,
-        recentKwHits,
-        queueKwHits,
       };
     });
 
-    // Remove hard-skips, then sort by penalized score, take top 8
-    const eligible = scoredCandidates.filter(c => !c.hardSkip);
-    eligible.sort((a, b) => (b.originalScore - b.overlapPenalty) - (a.originalScore - a.overlapPenalty));
-    const filteredTopPosts = eligible.slice(0, 8).map(c => c.post);
+    // Sort by penalized score — diverse topics naturally float to the top
+    scoredCandidates.sort((a, b) => (b.originalScore - b.overlapPenalty) - (a.originalScore - a.overlapPenalty));
+    const filteredTopPosts = scoredCandidates.slice(0, 8);
 
-    const hardSkipped = scoredCandidates.length - eligible.length;
-    console.log(`[Content:${userId.slice(0, 8)}] Draft candidates: ${(topPosts || []).length} total → ${hardSkipped} hard-skipped (topic overlap) → ${filteredTopPosts.length} queued for drafting`);
+    console.log(`[Content:${userId.slice(0, 8)}] Draft candidates: ${filteredTopPosts.length} (${filteredTopPosts.filter(c => c.needsFreshnessCheck).length} will get freshness check)`);
 
-    // Build synthetic "draft queue" entries so generateDraft knows what's already queued
-    // These are appended to postHistory with source='draft_queue' to signal the AI
-    const queuedTopicEntries = Object.entries(queueTopicCounts)
-      .filter(([, count]) => count > 0)
-      .map(([topic]) => ({
-        post_text: '',
-        topic_tags: [topic],
-        hook_type: null,
-        posted_at: new Date().toISOString(),
-        source: 'draft_queue',
-      }));
-    const enrichedHistory = [...(postHistory || []), ...queuedTopicEntries];
+    // Last 30 days of actual posts for freshness check context
+    const thirtyDayPosts = (postHistory || []).filter(p =>
+      p.posted_at && new Date(p.posted_at) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    );
 
-    for (const post of filteredTopPosts) {
+    for (const candidate of filteredTopPosts) {
+      const post = candidate.post;
       try {
-        const draft = await generateDraft(post, profile || {}, enrichedHistory, voiceSamples || [], contentPrefs || []);
-        if (draft) {
-          await db.from('content_feed').update({
-            draft_text: draft.draft_text,
-            draft_topic_tags: draft.topic_tags || [],
-            draft_hook_type: draft.hook_type,
-            draft_image_hint: draft.image_suggestion,
-            draft_hashtags: draft.hashtags || [],
-            draft_source_urls: draft.source_urls,
-            draft_continuity_ref: draft.continuity_reference,
-            draft_status: 'generated',
-          }).eq('id', post.id).eq('user_id', userId);
+        const draft = await generateDraft(post, profile || {}, postHistory || [], voiceSamples || [], contentPrefs || []);
+        if (!draft) continue;
+
+        // ─── Freshness check for overlapping topics ───
+        // Never blocks — just adds a flag the UI surfaces to the user
+        let continuityRef = draft.continuity_reference || null;
+        if (candidate.needsFreshnessCheck && thirtyDayPosts.length > 0) {
+          const freshness = await checkDraftFreshness(draft.draft_text, thirtyDayPosts);
+          if (freshness.flagged) {
+            // Encode flag into continuity_ref — UI parses this prefix
+            continuityRef = `REPETITIVE_FLAG:${freshness.reason}||FRESH_ANGLE:${freshness.freshAngle}`;
+            console.log(`[Content] Flagged as potentially repetitive: "${(draft.draft_text || '').slice(0, 60)}..."`);
+          }
         }
+
+        await db.from('content_feed').update({
+          draft_text: draft.draft_text,
+          draft_topic_tags: draft.topic_tags || [],
+          draft_hook_type: draft.hook_type,
+          draft_image_hint: draft.image_suggestion,
+          draft_hashtags: draft.hashtags || [],
+          draft_source_urls: draft.source_urls,
+          draft_continuity_ref: continuityRef,
+          draft_status: 'generated',
+        }).eq('id', post.id).eq('user_id', userId);
       } catch (err) {
         totalErrors++;
         console.error('[Content] Draft generation error:', err.message);
