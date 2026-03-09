@@ -302,11 +302,17 @@ export default async function handler(req, res) {
         // ─── Freshness check for overlapping topics ───
         // Never blocks — just adds a flag the UI surfaces to the user
         let continuityRef = draft.continuity_reference || null;
+        let draftIsRepetitive = false;
+        let draftRepetitiveReason = null;
+        let draftFreshAngle = null;
+
         if (candidate.needsFreshnessCheck && thirtyDayPosts.length > 0) {
           const freshness = await checkDraftFreshness(draft.draft_text, thirtyDayPosts);
           if (freshness.flagged) {
-            // Encode flag into continuity_ref — UI parses this prefix
-            continuityRef = `REPETITIVE_FLAG:${freshness.reason}||FRESH_ANGLE:${freshness.freshAngle}`;
+            // Item 13: write to dedicated columns instead of encoding into continuity_ref
+            draftIsRepetitive = true;
+            draftRepetitiveReason = freshness.reason;
+            draftFreshAngle = freshness.freshAngle;
             console.log(`[Content] Flagged as potentially repetitive: "${(draft.draft_text || '').slice(0, 60)}..."`);
           }
         }
@@ -319,6 +325,9 @@ export default async function handler(req, res) {
           draft_hashtags: draft.hashtags || [],
           draft_source_urls: draft.source_urls,
           draft_continuity_ref: continuityRef,
+          draft_is_repetitive: draftIsRepetitive,
+          draft_repetitive_reason: draftRepetitiveReason,
+          draft_fresh_angle: draftFreshAngle,
           draft_status: 'generated',
         }).eq('id', post.id).eq('user_id', userId);
       } catch (err) {
