@@ -288,57 +288,20 @@ function mapApiDraft(item) {
 // ═══════════════════════════════════════════
 
 function PostsView() {
-  const { drafts: rawDrafts, loading, approve: apiApprove, skip: apiSkip } = useDrafts();
-  const { data: perfData, refetch: refetchPerf } = usePerformance();
+  const { drafts: rawDrafts, loading, skip: apiSkip } = useDrafts();
   const [showSource, setShowSource] = useState({});
-  const [showHistory, setShowHistory] = useState(false);
   const [copied, setCopied] = useState({});
-  const [expandedApproved, setExpandedApproved] = useState({});
-
-  // Save-to-history state
-  // Manual save-to-history removed — post history comes from LinkedIn sync only
-
-  // Edit/delete state for post history
-  const [editingPost, setEditingPost] = useState(null);
-  const [editText, setEditText] = useState("");
-  const [editLikes, setEditLikes] = useState("");
-  const [editComments, setEditComments] = useState("");
-  const [editSaving, setEditSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [expandedDraft, setExpandedDraft] = useState({});
 
   // "Not for me" feedback state
   const [notForMeId, setNotForMeId] = useState(null);
   const [notForMeReason, setNotForMeReason] = useState("");
   const [notForMeSaving, setNotForMeSaving] = useState(false);
 
-  const postHistory = (perfData.posts || []).map(p => ({
-    id: p.id,
-    text: (p.post_text || "").substring(0, 80),
-    date: p.posted_at ? new Date(p.posted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
-    likes: p.likes || 0,
-    comments: p.comments || 0,
-    url: p.linkedin_url || "#",
-  }));
-
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
-  // Active and approved draft lists
+  // Only show generated drafts (no approved queue)
   const activeDrafts = rawDrafts.filter(d => d.draft_status === 'generated').map(mapApiDraft).sort((a, b) => (a.repetitiveFlag ? 1 : 0) - (b.repetitiveFlag ? 1 : 0));
-  const approvedDrafts = rawDrafts.filter(d => d.draft_status === 'approved').map(mapApiDraft);
-
-  const handleApprove = async (draft) => {
-    try {
-      await apiApprove(draft.id);
-      // Copy to clipboard for easy paste to LinkedIn
-      navigator.clipboard.writeText(draft.text).catch(() => {});
-    } catch (err) {
-      console.error('Approve failed:', err);
-    }
-  };
-
-  const handleSkip = async (id) => {
-    try { await apiSkip(id); } catch (err) { console.error('Skip failed:', err); }
-  };
 
   const handleCopy = (draft) => {
     navigator.clipboard.writeText(draft.text).then(() => {
@@ -347,43 +310,8 @@ function PostsView() {
     }).catch(() => {});
   };
 
-  const handleEditPost = (p) => {
-    setEditingPost(p.id);
-    setEditText(perfData.posts?.find(x => x.id === p.id)?.post_text || p.text);
-    setEditLikes(String(p.likes || 0));
-    setEditComments(String(p.comments || 0));
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingPost) return;
-    setEditSaving(true);
-    try {
-      await authFetch('/api/post-history', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: editingPost,
-          post_text: editText,
-          likes: parseInt(editLikes) || 0,
-          comments: parseInt(editComments) || 0,
-        }),
-      });
-      refetchPerf?.();
-      setEditingPost(null);
-    } catch (err) { console.error('Edit failed:', err); }
-    setEditSaving(false);
-  };
-
-  const handleDeletePost = async (id) => {
-    try {
-      await authFetch('/api/post-history', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      refetchPerf?.();
-      setConfirmDelete(null);
-    } catch (err) { console.error('Delete failed:', err); }
+  const handleSkip = async (id) => {
+    try { await apiSkip(id); } catch (err) { console.error('Skip failed:', err); }
   };
 
   const handleNotForMe = async () => {
@@ -414,7 +342,7 @@ function PostsView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} to review · ${approvedDrafts.length} approved`}>
+      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} draft${activeDrafts.length !== 1 ? 's' : ''} to review`}>
         Posts
       </SectionTitle>
 
@@ -425,14 +353,14 @@ function PostsView() {
         </div>
       )}
 
-      {!loading && activeDrafts.length === 0 && approvedDrafts.length === 0 && (
+      {!loading && activeDrafts.length === 0 && (
         <div style={{ padding: "60px 0", textAlign: "center" }}>
           <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No drafts yet</p>
           <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Run the content pipeline to generate drafts from trending content.</p>
         </div>
       )}
 
-      {!loading && (activeDrafts.length > 0 || approvedDrafts.length > 0) && <>
+      {!loading && activeDrafts.length > 0 && <>
 
         {/* ─── Active Drafts (collapsible, first one expanded by default) ─── */}
         {activeDrafts.length > 0 && (
@@ -440,13 +368,13 @@ function PostsView() {
             <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Review · {activeDrafts.length} draft{activeDrafts.length > 1 ? 's' : ''}</p>
             {activeDrafts.map((draft, idx) => {
               const tc = getTopicColor(draft.topic);
-              const isExpanded = expandedApproved[`active-${draft.id}`] ?? (idx === 0);
+              const isExpanded = expandedDraft[`active-${draft.id}`] ?? (idx === 0);
 
               return (
                 <div key={draft.id} style={{ borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.25s ease ${idx * 0.06}s both` }}>
                   {/* Collapsed header — always visible */}
                   <div
-                    onClick={() => setExpandedApproved(e => ({ ...e, [`active-${draft.id}`]: !isExpanded }))}
+                    onClick={() => setExpandedDraft(e => ({ ...e, [`active-${draft.id}`]: !isExpanded }))}
                     style={{
                       padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center",
                       cursor: "pointer", transition: "background 0.15s", borderRadius: 4,
@@ -566,10 +494,10 @@ function PostsView() {
                           </div>
                         )}
 
-                        {/* Actions: Approve + Skip + Not for me */}
+                        {/* Actions: Copy + Skip + Not for me */}
                         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                          <Btn primary onClick={(e) => { e.stopPropagation(); handleApprove(draft); }}>
-                            <Icons.check /> Approve
+                          <Btn primary onClick={(e) => { e.stopPropagation(); handleCopy(draft); }}>
+                            {copied[draft.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy to Clipboard</>}
                           </Btn>
                           <Btn onClick={(e) => { e.stopPropagation(); handleSkip(draft.id); }}>
                             Skip
@@ -600,141 +528,10 @@ function PostsView() {
           <div style={{ padding: "50px 0", animation: "fadeIn 0.3s ease" }}>
             <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All caught up.</p>
             <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>
-              {approvedDrafts.length > 0
-                ? `${approvedDrafts.length} post${approvedDrafts.length > 1 ? 's' : ''} ready. Next drafts arrive tomorrow at 6am.`
-                : "Next drafts arrive tomorrow at 6am."
-              }
+              Next drafts arrive tomorrow at 6am.
             </p>
           </div>
         )}
-
-        {/* Approved queue */}
-        {approvedDrafts.length > 0 && (
-          <div style={{ marginTop: 48 }}>
-            <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Approved · {approvedDrafts.length} ready</p>
-            {approvedDrafts.map(d => {
-              const tc = getTopicColor(d.topic);
-              const isExpanded = expandedApproved[d.id];
-              return (
-                <div key={d.id} style={{ borderBottom: `1px solid ${C.stroke}` }}>
-                  <div
-                    onClick={() => setExpandedApproved(e => ({ ...e, [d.id]: !e[d.id] }))}
-                    style={{
-                      padding: "14px 0", display: "flex", justifyContent: "space-between", alignItems: "center",
-                      cursor: "pointer", transition: "background 0.15s", borderRadius: 4,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.green, boxShadow: `0 0 6px ${C.green}40` }} />
-                      <span style={{ fontSize: 14, color: C.textSoft }}>{d.text.split("\n")[0]}</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Tag color={tc.fg} bg={tc.bg}>{d.topic}</Tag>
-                      <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}><Icons.chevRight /></span>
-                    </div>
-                  </div>
-                  {isExpanded && (
-                    <div style={{ padding: "0 0 20px 18px", animation: "fadeIn 0.2s ease" }}>
-                      <div style={{ fontSize: 14, color: C.text, lineHeight: 1.75, whiteSpace: "pre-wrap", marginBottom: 14, maxWidth: 560, borderLeft: `2px solid ${C.green}`, paddingLeft: 16 }}>
-                        {d.text}
-                      </div>
-                      <Btn onClick={() => handleCopy(d)}>
-                        {copied[d.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy to Clipboard</>}
-                      </Btn>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Post History */}
-        <div style={{ marginTop: 48 }}>
-          <button onClick={() => setShowHistory(!showHistory)}
-            style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: C.textGhost, fontSize: 12, fontFamily: F.sans, padding: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = C.textFaint}
-            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}
-          >
-            <span style={{ transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex" }}><Icons.chevRight /></span>
-            Post History
-            <span style={{ fontFamily: F.mono, fontSize: 11 }}>{postHistory.length}</span>
-          </button>
-          {showHistory && (
-            <div style={{ marginTop: 12, animation: "fadeIn 0.2s ease" }}>
-              {postHistory.length === 0 && (
-                <p style={{ fontSize: 13, color: C.textGhost, padding: "12px 0" }}>No posts saved yet. Approve a draft and save it to start building history.</p>
-              )}
-              {postHistory.map(p => (
-                <div key={p.id} style={{ borderBottom: `1px solid ${C.stroke}` }}>
-                  {editingPost === p.id ? (
-                    <div style={{ padding: "12px 8px", margin: "0 -8px", animation: "fadeIn 0.2s ease" }}>
-                      <textarea
-                        value={editText}
-                        onChange={e => setEditText(e.target.value)}
-                        rows={4}
-                        style={{ width: "100%", background: "transparent", border: "none", borderBottom: `1px solid ${C.gold}`, color: C.text, fontSize: 13, fontFamily: F.sans, padding: "6px 0", lineHeight: 1.5, resize: "vertical" }}
-                      />
-                      <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Likes</span>
-                          <input value={editLikes} onChange={e => setEditLikes(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>Comments</span>
-                          <input value={editComments} onChange={e => setEditComments(e.target.value)} style={{ width: 48, background: C.surface, border: `1px solid ${C.stroke}`, borderRadius: 4, color: C.text, padding: "4px 6px", fontSize: 12, fontFamily: F.mono, textAlign: "center" }} />
-                        </div>
-                        <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-                          <Btn primary onClick={handleSaveEdit} style={{ padding: "4px 12px", fontSize: 11 }}>
-                            {editSaving ? "Saving..." : "Save"}
-                          </Btn>
-                          <Btn ghost onClick={() => setEditingPost(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
-                        </div>
-                      </div>
-                    </div>
-                  ) : confirmDelete === p.id ? (
-                    <div style={{ padding: "12px 8px", margin: "0 -8px", display: "flex", alignItems: "center", justifyContent: "space-between", animation: "fadeIn 0.15s ease" }}>
-                      <span style={{ fontSize: 12, color: C.coral }}>Delete this post?</span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <Btn onClick={() => handleDeletePost(p.id)} style={{ padding: "4px 12px", fontSize: 11, background: C.coral, color: "#fff", border: "none" }}>Delete</Btn>
-                        <Btn ghost onClick={() => setConfirmDelete(null)} style={{ padding: "4px 10px", fontSize: 11 }}>Cancel</Btn>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: "12px 8px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", transition: "background 0.15s", borderRadius: 4, margin: "0 -8px", position: "relative" }}
-                      onMouseEnter={e => { e.currentTarget.style.background = C.surfaceHover; e.currentTarget.querySelector('.ph-actions').style.opacity = 1; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.querySelector('.ph-actions').style.opacity = 0; }}>
-                      <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", flex: 1, overflow: "hidden", marginRight: 12 }}>
-                        <span style={{ fontSize: 13, color: C.textSoft, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>{p.text}</span>
-                      </a>
-                      <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "center" }}>
-                        <div className="ph-actions" style={{ display: "flex", gap: 4, opacity: 0, transition: "opacity 0.15s" }}>
-                          <button onClick={(e) => { e.stopPropagation(); handleEditPost(p); }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
-                            onMouseEnter={e => e.currentTarget.style.color = C.gold}
-                            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>
-                            edit
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id); }}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: C.textGhost, padding: "2px 4px", fontSize: 11, fontFamily: F.mono }}
-                            onMouseEnter={e => e.currentTarget.style.color = C.coral}
-                            onMouseLeave={e => e.currentTarget.style.color = C.textGhost}>
-                            ×
-                          </button>
-                        </div>
-                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{p.date}</span>
-                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textFaint }}>{p.likes} · {p.comments}</span>
-                        {p.url && p.url !== "#" && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: C.textGhost, display: "flex" }} onClick={e => e.stopPropagation()}><Icons.external /></a>}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
 
       {/* "Not for me" modal overlay */}
       {notForMeId && (
@@ -782,7 +579,7 @@ function PostsView() {
 }
 
 // ═══════════════════════════════════════════
-// COMMENTS — Split layout sprint
+// COMMENTS — Full list view, click to expand
 // ═══════════════════════════════════════════
 
 function mapApiComment(item) {
@@ -808,41 +605,36 @@ function mapApiComment(item) {
 
 function CommentsView() {
   const { comments: rawComments, loading, markDone } = useComments();
-  const [copiedComment, setCopiedComment] = useState(false);
-  const [currentIdx, setCurrentIdx] = useState(0);
+  const [expandedId, setExpandedId] = useState(null);
   const [doneIds, setDoneIds] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
 
   const allComments = rawComments.map(mapApiComment);
-  const current = allComments[currentIdx];
   const doneCount = Object.keys(doneIds).length;
   const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
-  const handleCopyAndOpen = () => {
-    if (!current) return;
-    navigator.clipboard.writeText(current.comment).then(() => {
-      setCopiedComment(true);
+  const handleCopyAndOpen = (c) => {
+    navigator.clipboard.writeText(c.comment).then(() => {
+      setCopiedId(c.id);
       setTimeout(() => {
-        window.open(current.postUrl, "_blank");
-        setCopiedComment(false);
+        window.open(c.postUrl, "_blank");
+        setCopiedId(null);
       }, 600);
     }).catch(() => {
-      window.open(current.postUrl, "_blank");
+      window.open(c.postUrl, "_blank");
     });
   };
 
-  const handleDone = () => {
-    if (!current) return;
-    setDoneIds(d => ({ ...d, [current.id]: true }));
-    markDone(current.id).catch(err => console.error('markDone failed:', err));
-    if (currentIdx < allComments.length - 1) setCurrentIdx(i => i + 1);
+  const handleDone = (c) => {
+    setDoneIds(d => ({ ...d, [c.id]: true }));
+    markDone(c.id).catch(err => console.error('markDone failed:', err));
+    // Collapse and move to next undone item
+    const remaining = allComments.filter(x => !doneIds[x.id] && x.id !== c.id);
+    setExpandedId(remaining.length > 0 ? remaining[0].id : null);
   };
 
-  const handleNext = () => {
-    if (currentIdx < allComments.length - 1) setCurrentIdx(i => i + 1);
-  };
-
-  const handleBack = () => {
-    if (currentIdx > 0) setCurrentIdx(i => i - 1);
+  const handleToggle = (id) => {
+    setExpandedId(prev => prev === id ? null : id);
   };
 
   if (loading) return (
@@ -865,84 +657,132 @@ function CommentsView() {
     </div>
   );
 
-  if (!current) return null;
-
-  const isDone = doneIds[current.id];
+  const remaining = allComments.filter(c => !doneIds[c.id]).length;
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
-        <SectionTitle sub={`${currentIdx + 1} of ${allComments.length} · ${doneCount} done`}>Comments</SectionTitle>
-        <div style={{ width: 120, marginBottom: 42 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost }}>{currentIdx + 1}/{allComments.length}</span>
-          </div>
+      <SectionTitle sub={`${allComments.length} opportunities · ${doneCount} done · ${remaining} remaining`}>
+        Comments
+      </SectionTitle>
+
+      {/* Progress bar */}
+      {doneCount > 0 && (
+        <div style={{ marginBottom: 28 }}>
           <div style={{ height: 2, background: C.stroke, borderRadius: 1, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${((currentIdx + 1) / allComments.length) * 100}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
+            <div style={{ height: "100%", width: `${(doneCount / allComments.length) * 100}%`, background: C.green, borderRadius: 1, transition: "width 0.4s ease" }} />
           </div>
         </div>
+      )}
+
+      {/* Full list */}
+      <div>
+        {allComments.map((c, idx) => {
+          const isExpanded = expandedId === c.id;
+          const isDone = doneIds[c.id];
+          const isCopied = copiedId === c.id;
+
+          return (
+            <div
+              key={c.id}
+              style={{
+                borderBottom: `1px solid ${C.stroke}`,
+                opacity: isDone ? 0.45 : 1,
+                transition: "opacity 0.2s",
+                animation: `slideUp 0.2s ease ${idx * 0.03}s both`,
+              }}
+            >
+              {/* Row header — always visible, click to expand */}
+              <div
+                onClick={() => !isDone && handleToggle(c.id)}
+                style={{
+                  padding: "14px 8px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  cursor: isDone ? "default" : "pointer",
+                  borderRadius: 4,
+                  margin: "0 -8px",
+                  transition: "background 0.15s",
+                  background: isExpanded ? C.surfaceHover : "transparent",
+                }}
+                onMouseEnter={e => { if (!isDone) e.currentTarget.style.background = C.surfaceHover; }}
+                onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = "transparent"; }}
+              >
+                {/* Left: author + meta */}
+                <div style={{ flex: 1, minWidth: 0, marginRight: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: isDone ? C.textFaint : C.text, whiteSpace: "nowrap" }}>{c.author}</span>
+                    {c.snLead && <Tag color={C.green} bg={C.greenSoft}>SN Lead</Tag>}
+                    {isDone && <Tag color={C.green} bg={C.greenSoft}>Done</Tag>}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: C.textFaint, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 320 }}>
+                      {[c.title, c.company].filter(Boolean).join(" · ")}
+                    </span>
+                    <span style={{ fontSize: 12, color: C.textGhost, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 300 }}>
+                      · {c.post.substring(0, 60)}{c.post.length > 60 ? "…" : ""}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right: stats + chevron */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{c.engagement.likes} likes</span>
+                  <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{c.engagement.age}</span>
+                  {!isDone && (
+                    <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}>
+                      <Icons.chevRight />
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded content: 2-column post + comment */}
+              {isExpanded && (
+                <div style={{ padding: "0 0 24px 8px", animation: "fadeIn 0.2s ease" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+                    {/* Left: full post */}
+                    <div>
+                      <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Their post</p>
+                      <div style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.75, fontStyle: "italic", paddingLeft: 14, borderLeft: `1px solid ${C.stroke}`, marginBottom: 12 }}>
+                        {c.post}
+                      </div>
+                      <div style={{ display: "flex", gap: 16 }}>
+                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{c.engagement.likes} likes</span>
+                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.blue }}>{c.engagement.comments} comments</span>
+                        <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{c.engagement.age} ago</span>
+                      </div>
+                    </div>
+
+                    {/* Right: suggested comment + actions */}
+                    <div>
+                      <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>
+                        Suggested comment <span style={{ color: C.textGhost, textTransform: "none" }}>· {wordCount(c.comment)}w</span>
+                      </p>
+                      <div style={{ fontSize: 13, color: C.text, lineHeight: 1.75, padding: "16px 18px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.1)`, marginBottom: 16 }}>
+                        {c.comment}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <Btn primary onClick={() => handleCopyAndOpen(c)}>
+                          {isCopied ? <><Icons.check /> Copied — opening LinkedIn</> : <><Icons.external /> Copy &amp; Open</>}
+                        </Btn>
+                        <Btn onClick={() => handleDone(c)}>
+                          <Icons.check /> Done
+                        </Btn>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      <div key={current.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, animation: "popIn 0.25s ease" }}>
-        {/* Left: The post */}
-        <div>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: C.text }}>{current.author}</span>
-              {current.snLead && <Tag color={C.green} bg={C.greenSoft}>SN Lead</Tag>}
-              {isDone && <Tag color={C.green} bg={C.greenSoft}>Done</Tag>}
-            </div>
-            <span style={{ fontSize: 12, color: C.textFaint }}>{[current.title, current.company].filter(Boolean).join(" · ")}</span>
-          </div>
-          <div style={{ fontSize: 14, color: C.textSoft, lineHeight: 1.75, fontStyle: "italic", paddingLeft: 16, borderLeft: `1px solid ${C.stroke}` }}>
-            {current.post}
-          </div>
-          <div style={{ display: "flex", gap: 16, marginTop: 14 }}>
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{current.engagement.likes} likes</span>
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.blue }}>{current.engagement.comments} comments</span>
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{current.engagement.age} ago</span>
-          </div>
-        </div>
-
-        {/* Right: Comment */}
-        <div>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textFaint, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
-            Suggested comment <span style={{ color: C.textGhost, textTransform: "none" }}>· {wordCount(current.comment)}w</span>
-          </p>
-          <div style={{ fontSize: 14, color: C.text, lineHeight: 1.75, padding: "18px 20px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.1)`, marginBottom: 20 }}>
-            {current.comment}
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Btn primary onClick={handleCopyAndOpen}>
-              {copiedComment ? <><Icons.check /> Copied — opening LinkedIn</> : <><Icons.external /> Copy &amp; Open on LinkedIn</>}
-            </Btn>
-            {!isDone && <Btn color={C.green} onClick={handleDone}><Icons.check /> Done</Btn>}
-            <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
-              <Btn ghost onClick={handleBack} style={{ opacity: currentIdx === 0 ? 0.3 : 1, pointerEvents: currentIdx === 0 ? "none" : "auto" }}>← Back</Btn>
-              <Btn ghost onClick={handleNext} style={{ opacity: currentIdx >= allComments.length - 1 ? 0.3 : 1, pointerEvents: currentIdx >= allComments.length - 1 ? "none" : "auto" }}>Next →</Btn>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Queue */}
-      {currentIdx < allComments.length - 1 && (
-        <div style={{ marginTop: 40 }}>
-          <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>Up next</p>
-          {allComments.slice(currentIdx + 1, currentIdx + 4).map(c => (
-            <div key={c.id} style={{ padding: "10px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, color: C.textSoft, fontWeight: 500 }}>{c.author}</span>
-                <span style={{ fontSize: 11, color: C.textGhost }}>· {c.title}</span>
-                {c.snLead && <Tag color={C.green} bg={C.greenSoft}>SN</Tag>}
-                {doneIds[c.id] && <Tag color={C.green} bg={C.greenSoft}>Done</Tag>}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{c.engagement.likes}</span>
-                <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{c.engagement.age}</span>
-              </div>
-            </div>
-          ))}
+      {doneCount === allComments.length && allComments.length > 0 && (
+        <div style={{ padding: "48px 0", textAlign: "center", animation: "fadeIn 0.3s ease" }}>
+          <p style={{ fontFamily: F.serif, fontSize: 24, color: C.textSoft }}>All done.</p>
+          <p style={{ fontSize: 13, color: C.textFaint, marginTop: 8 }}>Next opportunities arrive tomorrow.</p>
         </div>
       )}
     </div>
@@ -955,6 +795,7 @@ function CommentsView() {
 // PERFORMANCE — Color-rich data display
 // ═══════════════════════════════════════════
 
+
 function PerformanceView() {
   const { data: perfData, loading, refetch } = usePerformance();
   const [period, setPeriod] = useState("all_time");
@@ -966,6 +807,9 @@ function PerformanceView() {
 
   const allPosts = perfData.posts || [];
   const commentCount = perfData.commentCount || 0;
+  const commentDoneWeek = perfData.commentDoneWeek || 0;
+  const commentDoneMonth = perfData.commentDoneMonth || 0;
+  const commentQueue = perfData.commentQueue || 0;
   const userCategories = perfData.categories || [];
   const allCategories = [...userCategories, ...(userCategories.includes("General") ? [] : ["General"])];
 
@@ -1089,10 +933,10 @@ function PerformanceView() {
 
   // Comment impact from real data
   const commentImpact = [
-    { label: "Total", value: commentCount, color: C.gold },
-    { label: "Replies", value: 0, color: C.blue },
-    { label: "Profile clicks", value: 0, color: C.purple },
-    { label: "Connections", value: 0, color: C.green },
+    { label: "All time", value: commentCount, color: C.gold },
+    { label: "This week", value: commentDoneWeek, color: C.blue },
+    { label: "This month", value: commentDoneMonth, color: C.purple },
+    { label: "In queue", value: commentQueue, color: C.green },
   ];
 
   // Compute topic breakdown from filtered posts — track all engagement for conversation rate
