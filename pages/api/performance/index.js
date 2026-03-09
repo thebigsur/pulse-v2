@@ -8,27 +8,53 @@ export default async function handler(req, res) {
   const db = createServerClient();
 
   if (req.method === 'GET') {
-    const { data: posts } = await db.from('advisor_posts')
-      .select('*')
-      .eq('user_id', userId)
-      .order('posted_at', { ascending: false })
-      .limit(100);
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: metrics } = await db.from('performance_metrics')
-      .select('*')
-      .eq('user_id', userId)
-      .order('period_end', { ascending: false })
-      .limit(5);
-
-    const { data: commentStats } = await db.from('comment_feed')
-      .select('commented')
-      .eq('user_id', userId)
-      .eq('commented', true);
-
-    const { data: profileData } = await db.from('advisor_profile')
-      .select('post_categories')
-      .eq('user_id', userId)
-      .limit(1);
+    const [
+      { data: posts },
+      { data: metrics },
+      { data: commentDoneAll },
+      { data: commentDoneWeekData },
+      { data: commentDoneMonthData },
+      { count: commentQueue },
+      { data: profileData },
+    ] = await Promise.all([
+      db.from('advisor_posts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('posted_at', { ascending: false })
+        .limit(100),
+      db.from('performance_metrics')
+        .select('*')
+        .eq('user_id', userId)
+        .order('period_end', { ascending: false })
+        .limit(5),
+      db.from('comment_feed')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('commented', true),
+      db.from('comment_feed')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('commented', true)
+        .gte('commented_at', weekAgo),
+      db.from('comment_feed')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('commented', true)
+        .gte('commented_at', monthAgo),
+      db.from('comment_feed')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('commented', false)
+        .not('suggested_comment', 'is', null),
+      db.from('advisor_profile')
+        .select('post_categories')
+        .eq('user_id', userId)
+        .limit(1),
+    ]);
 
     let categories = [];
     try {
@@ -38,7 +64,10 @@ export default async function handler(req, res) {
     return res.json({
       posts: posts || [],
       metrics: metrics || [],
-      commentCount: (commentStats || []).length,
+      commentCount: (commentDoneAll || []).length,
+      commentDoneWeek: (commentDoneWeekData || []).length,
+      commentDoneMonth: (commentDoneMonthData || []).length,
+      commentQueue: commentQueue || 0,
       categories,
     });
   }
