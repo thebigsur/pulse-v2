@@ -105,6 +105,10 @@ CREATE TABLE IF NOT EXISTS content_feed (
   draft_hashtags TEXT[] DEFAULT '{}',
   draft_source_urls TEXT,
   draft_continuity_ref TEXT,
+  -- Item 13: structured freshness columns (replaces encoding hack in draft_continuity_ref)
+  draft_is_repetitive BOOLEAN DEFAULT false,
+  draft_repetitive_reason TEXT,
+  draft_fresh_angle TEXT,
   draft_status TEXT DEFAULT 'pending' CHECK (draft_status IN ('pending', 'generated', 'approved', 'skipped', 'replaced')),
   -- Meta
   scraped_at TIMESTAMPTZ DEFAULT now(),
@@ -237,3 +241,11 @@ BEGIN
 EXCEPTION WHEN others THEN
   RAISE NOTICE 'Some policies may already exist - continuing';
 END $$;
+
+-- ─── Item 13 Migration: structured freshness columns ───
+-- Run this once against existing Supabase deployments that already have the
+-- content_feed table. New deployments pick up the columns from the CREATE TABLE
+-- definition above and do not need this block.
+ALTER TABLE content_feed ADD COLUMN IF NOT EXISTS draft_is_repetitive BOOLEAN DEFAULT false;
+ALTER TABLE content_feed ADD COLUMN IF NOT EXISTS draft_repetitive_reason TEXT;
+ALTER TABLE content_feed ADD COLUMN IF NOT EXISTS draft_fresh_angle TEXT;
