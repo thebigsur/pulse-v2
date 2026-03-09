@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useDrafts, useComments, useOutreach, usePerformance } from "../lib/hooks";
+import { useDrafts, useComments, usePerformance } from "../lib/hooks";
 import { createBrowserClient } from "../lib/supabase";
 
 // authFetch — drop-in replacement for fetch() that automatically attaches
@@ -225,7 +225,7 @@ const I = ({ d, s = 20 }) => (
 const Icons = {
   posts: () => <I d="M4 4h16v16H4z M4 9h16 M9 4v16" />,
   comments: () => <I d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />,
-  outreach: () => <I d="M22 2L11 13 M22 2l-7 20-4-9-9-4z" />,
+
   performance: () => <I d="M12 20V10 M18 20V4 M6 20v-4" />,
   user: () => <I d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2 M12 3a4 4 0 110 8 4 4 0 010-8z" />,
   settings: () => <I d="M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />,
@@ -949,116 +949,7 @@ function CommentsView() {
   );
 }
 
-// ═══════════════════════════════════════════
-// OUTREACH
-// ═══════════════════════════════════════════
 
-function mapApiLead(item) {
-  const daysAgo = item.surfaced_at
-    ? Math.max(0, Math.round((Date.now() - new Date(item.surfaced_at).getTime()) / (1000 * 60 * 60 * 24)))
-    : 0;
-  return {
-    id: item.id,
-    name: item.name || "Unknown",
-    title: [item.title, item.company].filter(Boolean).join(", "),
-    profileUrl: item.linkedin_url || "#",
-    interaction: item.interaction_text || "",
-    daysAgo,
-    signal: item.signal_strength || "moderate",
-    starter: item.conversation_starter || "",
-  };
-}
-
-function OutreachView() {
-  const { leads: rawLeads, loading, updateStatus } = useOutreach();
-  const [copiedStarter, setCopiedStarter] = useState({});
-
-  const active = rawLeads.map(mapApiLead);
-
-  const handleOpenProfile = (lead) => {
-    window.open(lead.profileUrl, "_blank");
-  };
-
-  const handleCopyMessage = (lead) => {
-    navigator.clipboard.writeText(lead.starter).then(() => {
-      setCopiedStarter(c => ({ ...c, [lead.id]: true }));
-      setTimeout(() => setCopiedStarter(c => ({ ...c, [lead.id]: false })), 2000);
-    }).catch(() => {});
-  };
-
-  const handleDismiss = async (id) => {
-    try { await updateStatus(id, 'dismissed'); } catch (err) { console.error('Dismiss failed:', err); }
-  };
-
-  const handleMessaged = async (id) => {
-    try { await updateStatus(id, 'messaged'); } catch (err) { console.error('Messaged failed:', err); }
-  };
-
-  if (loading) return (
-    <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle>Outreach</SectionTitle>
-      <div style={{ padding: "60px 0", textAlign: "center" }}>
-        <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>Loading leads...</p>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={active.length > 0 ? `${active.length} people who engaged with your content` : "People who engaged with your content"}>Outreach</SectionTitle>
-      {active.length > 0 && <p style={{ fontSize: 13, color: C.gold, marginBottom: 28 }}>People you message are 90% more likely to see your next post.</p>}
-
-      {active.length === 0 && (
-        <div style={{ padding: "60px 0" }}>
-          <p style={{ fontFamily: F.serif, fontSize: 20, color: C.textSoft }}>No outreach leads yet</p>
-          <p style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Leads surface here when people engage with your posts and comments.</p>
-        </div>
-      )}
-
-      {active.map((lead, idx) => (
-        <div key={lead.id} style={{ padding: "28px 0", borderBottom: `1px solid ${C.stroke}`, animation: `slideUp 0.3s ease ${idx * 0.06}s both` }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                <SignalDot strength={lead.signal} />
-                <span style={{ fontSize: 16, fontWeight: 600, color: C.text }}>{lead.name}</span>
-                <Tag color={lead.signal === "strong" ? C.green : C.gold} bg={lead.signal === "strong" ? C.greenSoft : C.goldSoft}>{lead.signal}</Tag>
-              </div>
-              <span style={{ fontSize: 12, color: C.textFaint }}>{lead.title}</span>
-            </div>
-            <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{lead.daysAgo}d</span>
-          </div>
-
-          {lead.interaction && (
-            <div style={{ fontSize: 13, color: C.textSoft, lineHeight: 1.6, fontStyle: "italic", paddingLeft: 16, borderLeft: `2px solid ${C.purple}`, marginBottom: 18 }}>
-              {lead.interaction}
-            </div>
-          )}
-
-          {lead.starter && (
-            <div style={{ marginBottom: 18 }}>
-              <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Suggested comment — edit in your voice</p>
-              <div style={{ padding: "16px 18px", background: C.goldGlow, borderRadius: 8, border: `1px solid rgba(200,169,110,0.08)` }}>
-                <p style={{ fontSize: 14, color: C.text, lineHeight: 1.7 }}>{lead.starter}</p>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn primary onClick={() => handleOpenProfile(lead)}><Icons.external /> Open Profile</Btn>
-            {lead.starter && (
-              <Btn onClick={() => handleCopyMessage(lead)}>
-                {copiedStarter[lead.id] ? <><Icons.check /> Copied</> : <><Icons.copy /> Copy Message</>}
-              </Btn>
-            )}
-            <Btn ghost onClick={() => handleMessaged(lead.id)}>Messaged</Btn>
-            <Btn ghost onClick={() => handleDismiss(lead.id)}>Dismiss</Btn>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ═══════════════════════════════════════════
 // PERFORMANCE — Color-rich data display
@@ -2259,12 +2150,7 @@ function SettingsView() {
       <SectionTitle sub="Pipeline configuration and operational settings">Settings</SectionTitle>
       <Field label="Content Source Keywords" hint="One per line — drives trending content scraping"><Input multiline rows={5} value={settings.content_keywords} onChange={v => updateField("content_keywords", v)} placeholder="equity compensation\nRSU tax strategy\nwealth building high earners" /></Field>
       <Field label="Comment Target Keywords" hint="One per line — topics where your ICP engages"><Input multiline rows={5} value={settings.comment_keywords} onChange={v => updateField("comment_keywords", v)} placeholder="tech careers\nstartup culture\nBigLaw life" /></Field>
-      <Field label="Non-Prospect Filter" hint="One per line — exclude from Outreach"><Input multiline rows={3} value={settings.non_prospect_filter} onChange={v => updateField("non_prospect_filter", v)} placeholder="Financial Advisor\nWealth Manager\nInsurance Agent" /></Field>
-      <Field label="Sales Navigator Lead List">
-        <div style={{ padding: "14px 0", borderBottom: `1px solid ${C.stroke}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: C.textSoft }}>{settings.lead_list_count || 0} leads · {settings.lead_list_updated || "Not uploaded"}</span><Btn>Upload CSV</Btn>
-        </div>
-      </Field>
+
       <SaveButton onSave={saveSettings} saving={saving} saved={saved} />
       <Separator />
       <div style={{ marginBottom: 24, padding: "16px", background: "#0e0e10", borderRadius: 8, border: `1px solid ${C.stroke}` }}>
@@ -2327,18 +2213,7 @@ function SettingsView() {
           );
         })}
       </div>
-      <div>
-        <p style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 14 }}>Monthly cost</p>
-        {[{ name: "Apify (scraping)", cost: "$49.00" }, { name: "Claude API (scoring + generation)", cost: "$22.40" }, { name: "Supabase (database)", cost: "$0.00" }].map(c => (
-          <div key={c.name} style={{ padding: "8px 0", display: "flex", justifyContent: "space-between" }}>
-            <span style={{ fontSize: 13, color: C.textSoft }}>{c.name}</span><span style={{ fontSize: 13, fontFamily: F.mono, color: C.textFaint }}>{c.cost}</span>
-          </div>
-        ))}
-        <div style={{ padding: "12px 0", borderTop: `1px solid ${C.stroke}`, marginTop: 8, display: "flex", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>Total</span>
-          <span style={{ fontSize: 14, fontFamily: F.mono, color: C.gold, fontWeight: 600 }}>$71.40/mo</span>
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -2433,7 +2308,7 @@ function Rail({ view, setView, onSignOut }) {
   const main = [
     { id: "posts", icon: Icons.posts, label: "Posts" },
     { id: "comments", icon: Icons.comments, label: "Comments" },
-    { id: "outreach", icon: Icons.outreach, label: "Outreach" },
+
     { id: "performance", icon: Icons.performance, label: "Performance" },
   ];
 
@@ -2497,7 +2372,7 @@ function Rail({ view, setView, onSignOut }) {
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = loading, null = no session
   const [view, setView] = useState("posts");
-  const views = { posts: PostsView, comments: CommentsView, outreach: OutreachView, performance: PerformanceView, profile: ProfileView, settings: SettingsView };
+  const views = { posts: PostsView, comments: CommentsView, performance: PerformanceView, profile: ProfileView, settings: SettingsView };
   const View = views[view];
 
   useEffect(() => {
