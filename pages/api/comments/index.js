@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       .eq('commented', false)
       .not('suggested_comment', 'is', null)
       .order('comment_priority', { ascending: false })
-      .limit(20);
+      .limit(50);
     if (error) return res.status(500).json({ error: error.message });
     return res.json(data);
   }
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     const { id } = req.body;
     if (!id) return res.status(400).json({ error: 'id required' });
     const { error } = await db.from('comment_feed')
-      .update({ commented: true })
+      .update({ commented: true, commented_at: new Date().toISOString() })
       .eq('id', id)
       .eq('user_id', userId);
     if (error) return res.status(500).json({ error: error.message });
