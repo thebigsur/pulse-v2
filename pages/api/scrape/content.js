@@ -284,7 +284,7 @@ export default async function handler(req, res) {
 
     // Sort by penalized score — diverse topics naturally float to the top
     scoredCandidates.sort((a, b) => (b.originalScore - b.overlapPenalty) - (a.originalScore - a.overlapPenalty));
-    const filteredTopPosts = scoredCandidates.slice(0, 8);
+    const filteredTopPosts = scoredCandidates.slice(0, 20);
 
     console.log(`[Content:${userId.slice(0, 8)}] Draft candidates: ${filteredTopPosts.length} (${filteredTopPosts.filter(c => c.needsFreshnessCheck).length} will get freshness check)`);
 
