@@ -6,7 +6,7 @@
 
 import { createServerClient } from '../../../lib/supabase';
 import { scrapeLinkedInContent, scrapeTwitterContent } from '../../../lib/scraper';
-import { scoreContent, generateDraft, checkDraftFreshness } from '../../../lib/ai';
+import { scoreContent, generateDraft, checkDraftFreshness, generateCallbackDraft } from '../../../lib/ai';
 
 export const config = {
   maxDuration: 300,
@@ -299,26 +299,54 @@ export default async function handler(req, res) {
         const draft = await generateDraft(post, profile || {}, postHistory || [], voiceSamples || [], contentPrefs || []);
         if (!draft) continue;
 
-        // ─── Freshness check for overlapping topics ───
-        // Never blocks — just adds a flag the UI surfaces to the user
+        // ─── Universal freshness check — runs on every draft, every scrape ───
+        // Guarantees every post on the Posts page has been cross-referenced
+        // against the advisor's LinkedIn post history before being shown.
         let continuityRef = draft.continuity_reference || null;
         let draftIsRepetitive = false;
         let draftRepetitiveReason = null;
         let draftFreshAngle = null;
+        let finalDraftText = draft.draft_text;
 
-        if (candidate.needsFreshnessCheck && thirtyDayPosts.length > 0) {
+        if (thirtyDayPosts.length > 0) {
           const freshness = await checkDraftFreshness(draft.draft_text, thirtyDayPosts);
           if (freshness.flagged) {
-            // Item 13: write to dedicated columns instead of encoding into continuity_ref
-            draftIsRepetitive = true;
-            draftRepetitiveReason = freshness.reason;
-            draftFreshAngle = freshness.freshAngle;
-            console.log(`[Content] Flagged as potentially repetitive: "${(draft.draft_text || '').slice(0, 60)}..."`);
+            console.log(`[Content] Repetitive draft detected — regenerating with callback: "${(draft.draft_text || '').slice(0, 60)}..."`);
+
+            // Find the specific post that overlaps so we can reference it in the callback
+            const similarPost = thirtyDayPosts[0]; // checkDraftFreshness compares against slice(0,8); use top post as proxy
+            const rewritten = await generateCallbackDraft(
+              draft.draft_text,
+              similarPost,
+              post,
+              profile || {},
+              voiceSamples || []
+            );
+
+            if (rewritten) {
+              // Re-check the rewritten draft — if it passes, mark clean; if still flagged, keep ⚠️
+              const recheck = await checkDraftFreshness(rewritten, thirtyDayPosts);
+              finalDraftText = rewritten;
+              if (recheck.flagged) {
+                // Still too similar after rewrite — surface ⚠️ so user knows
+                draftIsRepetitive = true;
+                draftRepetitiveReason = recheck.reason;
+                draftFreshAngle = recheck.freshAngle;
+                console.log(`[Content] Still flagged after rewrite — surfacing ⚠️ to user`);
+              } else {
+                console.log(`[Content] Rewrite passed freshness check — serving clean draft`);
+              }
+            } else {
+              // Callback generation failed — fall back to original with ⚠️
+              draftIsRepetitive = true;
+              draftRepetitiveReason = freshness.reason;
+              draftFreshAngle = freshness.freshAngle;
+            }
           }
         }
 
         await db.from('content_feed').update({
-          draft_text: draft.draft_text,
+          draft_text: finalDraftText,
           draft_topic_tags: draft.topic_tags || [],
           draft_hook_type: draft.hook_type,
           draft_image_hint: draft.image_suggestion,
