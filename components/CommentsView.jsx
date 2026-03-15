@@ -22,10 +22,22 @@ function mapApiComment(item) {
     },
     comment: item.suggested_comment || "",
     snLead: item.sn_lead || false,
+    addedAt: item.scraped_at || null,
   };
 }
 
 const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
+
+function relativeDate(iso) {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
 
 export default function CommentsView() {
   const { comments: rawComments, loading, markDone } = useComments();
@@ -121,6 +133,11 @@ export default function CommentsView() {
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                   <span style={{ fontSize: 11, fontFamily: F.mono, color: C.coral }}>{c.engagement.likes} likes</span>
                   <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{c.engagement.age}</span>
+                  {relativeDate(c.addedAt) && (
+                    <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, opacity: 0.5 }} title="Added to Pulse">
+                      added {relativeDate(c.addedAt)}
+                    </span>
+                  )}
                   {!isDone && (
                     <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}>
                       <Icons.chevRight />
