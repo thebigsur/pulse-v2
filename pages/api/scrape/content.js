@@ -313,8 +313,9 @@ export default async function handler(req, res) {
           if (freshness.flagged) {
             console.log(`[Content] Repetitive draft detected — regenerating with callback: "${(draft.draft_text || '').slice(0, 60)}..."`);
 
-            // Find the specific post that overlaps so we can reference it in the callback
-            const similarPost = thirtyDayPosts[0]; // checkDraftFreshness compares against slice(0,8); use top post as proxy
+            // Use the specific post index returned by the freshness check
+            const similarPostIdx = Math.min(freshness.similarPostIndex || 0, thirtyDayPosts.length - 1);
+            const similarPost = thirtyDayPosts[similarPostIdx];
             const rewritten = await generateCallbackDraft(
               draft.draft_text,
               similarPost,
