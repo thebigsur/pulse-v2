@@ -61,18 +61,54 @@ function mapApiDraft(item) {
     repetitiveReason,
     freshAngle,
     continuityRef,
+    addedAt: item.scraped_at || null,
   };
 }
 
 const wordCount = (text) => text.split(/\s+/).filter(w => w.length > 0).length;
 
+function relativeDate(iso) {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  if (days === 1) return "yesterday";
+  return `${days}d ago`;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PostsView() {
-  const { drafts: rawDrafts, loading, skip: apiSkip, regenerate: apiRegenerate } = useDrafts();
+  const { drafts: rawDrafts, loading, skip: apiSkip, regenerate: apiRegenerate, refetch } = useDrafts();
   const [showSource, setShowSource] = useState({});
   const [copied, setCopied] = useState({});
   const [expandedDraft, setExpandedDraft] = useState({});
   const [regenerating, setRegenerating] = useState({});
+
+  // Re-scrape state
+  const [scraping, setScraping] = useState(false);
+  const [scrapeMsg, setScrapeMsg] = useState(null);
+
+  const handleReScrape = async () => {
+    setScraping(true);
+    setScrapeMsg(null);
+    try {
+      const res = await authFetch("/api/run-pipeline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "content" }),
+      });
+      const result = await res.json();
+      setScrapeMsg(result.error ? "error" : "done");
+      if (!result.error) setTimeout(() => { setScrapeMsg(null); refetch(); }, 1500);
+    } catch {
+      setScrapeMsg("error");
+    } finally {
+      setScraping(false);
+      setTimeout(() => setScrapeMsg(null), 5000);
+    }
+  };
 
   // "Not for me" feedback state
   const [notForMeId, setNotForMeId] = useState(null);
@@ -126,9 +162,29 @@ export default function PostsView() {
 
   return (
     <div style={{ animation: "enter 0.35s ease" }}>
-      <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} draft${activeDrafts.length !== 1 ? "s" : ""} to review`}>
-        Posts
-      </SectionTitle>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 0 }}>
+        <SectionTitle sub={loading ? "Loading drafts..." : `${activeDrafts.length} draft${activeDrafts.length !== 1 ? "s" : ""} to review`}>
+          Posts
+        </SectionTitle>
+        <button
+          onClick={handleReScrape}
+          disabled={scraping}
+          style={{
+            marginTop: 6,
+            display: "flex", alignItems: "center", gap: 6,
+            background: "none", border: `1px solid ${scrapeMsg === "error" ? C.coral : scrapeMsg === "done" ? C.green : C.stroke}`,
+            borderRadius: 6, padding: "6px 12px", cursor: scraping ? "default" : "pointer",
+            color: scrapeMsg === "error" ? C.coral : scrapeMsg === "done" ? C.green : C.textFaint,
+            fontSize: 11, fontFamily: "var(--font-mono, monospace)", letterSpacing: "0.06em",
+            opacity: scraping ? 0.6 : 1, transition: "border-color 0.2s, color 0.2s",
+          }}
+          onMouseEnter={e => { if (!scraping) e.currentTarget.style.borderColor = C.gold; if (!scraping) e.currentTarget.style.color = C.gold; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = scrapeMsg === "error" ? C.coral : scrapeMsg === "done" ? C.green : C.stroke; e.currentTarget.style.color = scrapeMsg === "error" ? C.coral : scrapeMsg === "done" ? C.green : C.textFaint; }}
+        >
+          <Icons.refresh />
+          {scraping ? "Scraping…" : scrapeMsg === "done" ? "Done!" : scrapeMsg === "error" ? "Failed" : "Re-scrape"}
+        </button>
+      </div>
 
       {loading && (
         <div style={{ padding: "60px 0", textAlign: "center" }}>
@@ -176,6 +232,11 @@ export default function PostsView() {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                       <span style={{ fontSize: 11, fontFamily: F.mono, color: C.textGhost }}>{wordCount(draft.text)}w</span>
+                      {relativeDate(draft.addedAt) && (
+                        <span style={{ fontSize: 10, fontFamily: F.mono, color: C.textGhost, opacity: 0.6 }}>
+                          {relativeDate(draft.addedAt)}
+                        </span>
+                      )}
                       <Tag color={tc.fg} bg={tc.bg}>{draft.topic}</Tag>
                       <span style={{ transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "flex", color: C.textGhost }}>
                         <Icons.chevRight />
