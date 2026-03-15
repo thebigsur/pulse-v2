@@ -316,6 +316,22 @@ export default async function handler(req, res) {
             // Use the specific post index returned by the freshness check
             const similarPostIdx = Math.min(freshness.similarPostIndex || 0, thirtyDayPosts.length - 1);
             const similarPost = thirtyDayPosts[similarPostIdx];
+
+            // Replace internal [N] index references with a human-readable date + snippet
+            const resolveReason = (reason) => {
+              if (!reason) return reason;
+              return reason.replace(/\[(\d+)\]/g, (match, n) => {
+                const idx = parseInt(n) - 1;
+                const p = thirtyDayPosts[idx];
+                if (!p) return match;
+                const date = p.posted_at
+                  ? new Date(p.posted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                  : 'recent';
+                const snippet = (p.post_text || '').slice(0, 40).trim();
+                return `your ${date} post ("${snippet}...")`;
+              });
+            };
+
             const rewritten = await generateCallbackDraft(
               draft.draft_text,
               similarPost,
@@ -331,7 +347,7 @@ export default async function handler(req, res) {
               if (recheck.flagged) {
                 // Still too similar after rewrite — surface ⚠️ so user knows
                 draftIsRepetitive = true;
-                draftRepetitiveReason = recheck.reason;
+                draftRepetitiveReason = resolveReason(recheck.reason);
                 draftFreshAngle = recheck.freshAngle;
                 console.log(`[Content] Still flagged after rewrite — surfacing ⚠️ to user`);
               } else {
@@ -340,7 +356,7 @@ export default async function handler(req, res) {
             } else {
               // Callback generation failed — fall back to original with ⚠️
               draftIsRepetitive = true;
-              draftRepetitiveReason = freshness.reason;
+              draftRepetitiveReason = resolveReason(freshness.reason);
               draftFreshAngle = freshness.freshAngle;
             }
           }
