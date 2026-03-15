@@ -249,9 +249,9 @@ export default async function handler(req, res) {
     // Also build keyword set for queued topics
     const queuedTopicWords = getKeywordsForTags(new Set(Object.keys(queueTopicCounts)));
 
-    // ─── Auto-expire drafts older than 14 days ───
+    // ─── Auto-expire drafts older than 7 days ───
     const expiryCutoff = new Date();
-    expiryCutoff.setDate(expiryCutoff.getDate() - 14);
+    expiryCutoff.setDate(expiryCutoff.getDate() - 7);
     await db.from('content_feed')
       .update({ draft_status: 'expired' })
       .eq('user_id', userId)
