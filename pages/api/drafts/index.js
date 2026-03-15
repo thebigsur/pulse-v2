@@ -17,6 +17,7 @@ export default async function handler(req, res) {
       .select('*')
       .eq('user_id', userId)
       .not('draft_text', 'is', null)
+      .order('scraped_at', { ascending: false })
       .order('expertise_signal', { ascending: false });
     if (status) query = query.eq('draft_status', status);
     else query = query.in('draft_status', ['generated', 'approved']);
